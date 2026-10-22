@@ -256,3 +256,189 @@ def provider_from_config(name: str, redirect_base: str = "http://127.0.0.1:8000"
         client_id=o.get("client_id", ""),           # NICHT erfunden; meist leer
         client_secret_env=o.get("client_secret_env", ""),
     )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Device-Authorization-Grant (RFC 8628) — "Device Code Flow"
+#
+#  Recherche-Stand (offizielle Quelle): Der Device-Code-Flow greift real nur
+#  dort, wo ein Provider ihn dokumentiert anbietet. Belegt ist er für den
+#  "Kimi Code"-Managed-Service (MoonshotAI/kimi-cli, auth.kimi.com):
+#      POST {device_authorization_url}  client_id            -> user_code/device_code
+#      POST {token_url} grant_type=urn:ietf:params:oauth:grant-type:device_code
+#  Der Flow ist generisch gebaut; Endpunkte/Client-IDs kommen aus der Config
+#  (llm.providers.<name>.oauth), es wird NICHTS erfunden. Fehlt ein oauth-Block,
+#  ist der Provider ``available=False`` und der Start schlägt sauber fehl.
+# ════════════════════════════════════════════════════════════════════════════
+_DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code"
+
+
+@dataclass
+class DeviceCodeProvider:
+    """Generischer Device-Authorization-Grant (RFC 8628).
+
+    Erfindet nichts: device_authorization_url/token_url/client_id/scopes kommen
+    aus der Config. Token-Werte werden NIE geloggt oder im Klartext persistiert
+    (Ablage verschlüsselt über TokenStore)."""
+    name: str
+    device_authorization_url: str = ""
+    token_url: str = ""
+    client_id: str = ""
+    scopes: str = ""
+
+    @property
+    def available(self) -> bool:
+        return bool(self.device_authorization_url and self.token_url and self.client_id)
+
+    def request_device_code(self) -> dict[str, Any]:
+        """Startet den Flow: fordert user_code/device_code an. Gibt die Anzeige-
+        Infos zurück (verification_uri_complete für den Nutzer). Keine Secrets."""
+        import httpx
+        if not self.available:
+            raise OAuthError(
+                f"Provider '{self.name}' hat keinen dokumentierten Device-Code-"
+                f"Flow konfiguriert (kein device_authorization_url/token_url/client_id)."
+            )
+        data = {"client_id": self.client_id}
+        if self.scopes:
+            data["scope"] = self.scopes
+        resp = httpx.post(self.device_authorization_url, data=data, timeout=30.0)
+        if resp.status_code != 200:
+            raise OAuthError(f"Device-Authorization HTTP {resp.status_code}: "
+                             f"{resp.text[:300]}")
+        d = resp.json()
+        if not d.get("device_code") or not d.get("user_code"):
+            raise OAuthError("Device-Authorization: Antwort ohne device_code/user_code.")
+        return {
+            "user_code": str(d.get("user_code", "")),
+            "device_code": str(d.get("device_code", "")),
+            "verification_uri": str(d.get("verification_uri", "")),
+            "verification_uri_complete": str(d.get("verification_uri_complete", "")),
+            "expires_in": int(d.get("expires_in") or 0) or None,
+            "interval": int(d.get("interval") or 5),
+        }
+
+    def poll_once(self, device_code: str) -> tuple[str, dict[str, Any]]:
+        """Ein einzelner Token-Poll. Rückgabe: (status, body) mit status in
+        {'success','pending','slow_down','denied','expired','error'}."""
+        import httpx
+        data = {
+            "client_id": self.client_id,
+            "device_code": device_code,
+            "grant_type": _DEVICE_GRANT,
+        }
+        resp = httpx.post(self.token_url, data=data, timeout=30.0)
+        try:
+            body = resp.json()
+        except Exception:
+            body = {}
+        if resp.status_code == 200 and body.get("access_token"):
+            return "success", body
+        err = str(body.get("error", "")).lower()
+        if err == "authorization_pending":
+            return "pending", body
+        if err == "slow_down":
+            return "slow_down", body
+        if err in ("access_denied", "expired_token"):
+            return ("denied" if err == "access_denied" else "expired"), body
+        return "error", body
+
+    def poll_for_token(self, device_code: str, interval: int = 5,
+                       timeout: float = 300.0, store: Optional[TokenStore] = None,
+                       sleep=None) -> dict[str, Any]:
+        """Pollt bis Token, Ablehnung oder Timeout. Speichert Tokens verschlüsselt.
+        Gibt Metadaten OHNE Token-Werte zurück."""
+        if sleep is None:
+            sleep = time.sleep
+        deadline = time.time() + float(timeout)
+        wait = max(1, int(interval))
+        while time.time() < deadline:
+            status, body = self.poll_once(device_code)
+            if status == "success":
+                saved = _normalize_tokens(body)
+                (store or TokenStore()).save(self.name, saved)
+                return {"ok": True, "provider": self.name,
+                        "scope": saved.get("scope", ""),
+                        "expires_at": saved.get("expires_at")}
+            if status == "pending":
+                sleep(wait); continue
+            if status == "slow_down":
+                wait += 5; sleep(wait); continue
+            # denied / expired / error → sauberer Fehler (nie Secrets)
+            raise OAuthError(f"Device-Flow abgebrochen (Status: {status}; "
+                             f"{str(body.get('error', ''))[:120]}).")
+        raise OAuthError("Device-Flow Timeout – keine Freigabe innerhalb der Frist.")
+
+
+def device_provider_from_config(name: str) -> "DeviceCodeProvider":
+    """Baut einen DeviceCodeProvider aus der Config (llm.providers.<name>.oauth).
+    Ohne oauth-Block ist der Provider ``available=False`` (sauberer Abbruch)."""
+    from .config import llm_config
+    providers = (llm_config().get("providers", {}) or {})
+    p = providers.get(name, {}) or {}
+    o = p.get("oauth", {}) or {}
+    return DeviceCodeProvider(
+        name=name,
+        device_authorization_url=o.get("device_authorization_url", ""),
+        token_url=o.get("token_url", ""),
+        client_id=o.get("client_id", ""),   # ggf. dokumentierter PUBLIC-Client (nie ein Secret)
+        scopes=o.get("scopes", ""),
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+#  Einheitliches Auth-Modell: pro Provider wählbar "api_key" ODER "oauth".
+#  Diese Helfer beschreiben nachvollziehbar, welche Methode(n) ein Provider laut
+#  Config unterstützt und welche aktiv gewählt ist — ohne je Werte offenzulegen.
+# ════════════════════════════════════════════════════════════════════════════
+def _provider_cfg(name: str) -> dict[str, Any]:
+    from .config import llm_config
+    return (llm_config().get("providers", {}) or {}).get(name, {}) or {}
+
+
+def oauth_flow(name: str) -> str:
+    """Dokumentierter OAuth-Flow des Providers:
+    'authorization_code' | 'device_code' | '' (kein OAuth)."""
+    o = _provider_cfg(name).get("oauth", {}) or {}
+    if o.get("device_authorization_url"):
+        return "device_code"
+    if o.get("authorize_url"):
+        return "authorization_code"
+    return ""
+
+
+def supported_auth_methods(name: str) -> list[str]:
+    """Welche Auth-Methoden der Provider laut Config anbietet.
+    Rückgabe-Elemente: 'none' | 'api_key' | 'oauth'."""
+    p = _provider_cfg(name)
+    if p.get("auth_mode") == "none":
+        return ["none"]
+    methods: list[str] = []
+    if p.get("key_env"):
+        methods.append("api_key")
+    if p.get("oauth_available") and oauth_flow(name):
+        methods.append("oauth")
+    return methods or ["api_key"]
+
+
+def selected_auth_method(name: str) -> str:
+    """Die pro Provider konfigurierte Methode (providers.<name>.auth_method),
+    validiert gegen die unterstützten. Default: erste unterstützte Methode."""
+    want = str(_provider_cfg(name).get("auth_method", "") or "").lower().strip()
+    sup = supported_auth_methods(name)
+    return want if want in sup else sup[0]
+
+
+def auth_overview() -> list[dict[str, Any]]:
+    """Übersicht aller Provider: unterstützte Methoden, aktive Methode, OAuth-Flow.
+    Enthält NIE Key-/Token-/Secret-Werte — nur Metadaten (für UI/Doku/Tests)."""
+    from .config import llm_config
+    out: list[dict[str, Any]] = []
+    for name in (llm_config().get("providers", {}) or {}):
+        out.append({
+            "provider": name,
+            "methods": supported_auth_methods(name),
+            "selected": selected_auth_method(name),
+            "oauth_flow": oauth_flow(name) or None,
+        })
+    return out

@@ -217,6 +217,16 @@ für die zur Laufzeit ein Key gesetzt ist (bzw. bei einem lokalen Dienst dieser
 erreichbar ist), werden als „verfügbar" gelistet; fehlt der Key/Dienst, wird der
 Provider sauber übersprungen (kein Crash).
 
+**Authentifizierung:** Der Router unterstützt **API-Key-Authentifizierung** und –
+wo der jeweilige Provider es offiziell anbietet – zusätzlich **OAuth** (OAuth 2.0
+Authorization Code mit PKCE für browserbasierte Anmeldung sowie den
+Device-Authorization-Grant/Device-Code-Flow für Anmeldung ohne lokalen Browser).
+Pro Provider ist die Methode wählbar (`auth_method: api_key | oauth`); Provider
+ohne dokumentierten OAuth-Flow bleiben key-only. Keys, OAuth-Client-Secrets und
+Tokens kommen **ausschließlich zur Laufzeit** (Umgebungsvariablen bzw. lokaler,
+verschlüsselter Token-Store) – **nichts davon ist im Repo hinterlegt**, und
+fehlende Credentials führen zu sauberem Überspringen statt zum Absturz.
+
 Provider-Status in der Oberfläche (zeigt **nie** Key-/Token-Werte):
 
 - **CLI:** `python -m antbb llm status`

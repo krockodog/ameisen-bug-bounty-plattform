@@ -34,21 +34,32 @@ llm:
       base_url: https://api.openai.com/v1
       api_style: openai
       auth_mode: key
+      # Einheitliches Auth-Modell: pro Provider waehlbar "api_key" ODER "oauth"
+      # (nur wo der Provider OAuth offiziell anbietet). Default hier: api_key.
+      auth_method: api_key
       oauth_available: true
       key_env: OPENAI_API_KEY
       default_model: gpt-4o
       fast_model: gpt-4o-mini
       oauth:
+        # "Sign in with ChatGPT" = OAuth 2.0 Authorization Code + PKCE (S256) + OIDC.
+        # Quelle: developers.openai.com/siwc (auth.openai.com). Die client_id
+        # entsteht zur Laufzeit (dynamische Registrierung) und wird NICHT
+        # hartkodiert; ein evtl. noetiges Client-Secret kommt nur via ENV.
+        flow: authorization_code
         authorize_url: https://auth.openai.com/api/accounts/authorize
         token_url: https://auth.openai.com/api/accounts/oauth/token
         redirect_path: /auth/openai/callback
         scopes: "openid profile email offline_access"
+        # client_id: (leer -> dynamische Registrierung)
+        # client_secret_env: OPENAI_OAUTH_CLIENT_SECRET   # optional, nur ENV
 
     anthropic:
       # Anthropic Messages API (docs.anthropic.com). Eigenes Format.
       base_url: https://api.anthropic.com
       api_style: anthropic
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: ANTHROPIC_API_KEY
       default_model: claude-3-5-sonnet-latest
@@ -60,6 +71,7 @@ llm:
       base_url: https://generativelanguage.googleapis.com/v1beta
       api_style: gemini
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: GEMINI_API_KEY
       default_model: gemini-1.5-pro
@@ -69,26 +81,42 @@ llm:
       base_url: https://api.minimax.io/v1
       api_style: openai
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: MINIMAX_API_KEY
       default_model: MiniMax-M3
       fast_model: MiniMax-M3.1-Flash
 
     moonshot:
-      # Moonshot / Kimi Open Platform (OpenAI-kompatibel).
+      # Moonshot / Kimi Open Platform (OpenAI-kompatibel) nutzt API-Keys.
+      # ZUSAETZLICH bietet der separate "Kimi Code"-Managed-Service einen
+      # dokumentierten Device-Code-OAuth-Flow (RFC 8628). Quelle:
+      # github.com/MoonshotAI/kimi-cli (auth.kimi.com). Die client_id ist ein
+      # oeffentlicher, dokumentierter Wert des offiziellen Kimi-CLI (kein Secret).
+      # Default bleibt api_key; "oauth" waehlbar fuer den Kimi-Code-Service.
       base_url: https://api.moonshot.ai/v1
       api_style: openai
       auth_mode: key
-      oauth_available: false
+      auth_method: api_key
+      oauth_available: true
       key_env: MOONSHOT_API_KEY
       default_model: kimi-k2-0905-preview
       fast_model: kimi-k2-0905-preview
+      oauth:
+        flow: device_code
+        device_authorization_url: https://auth.kimi.com/api/oauth/device_authorization
+        token_url: https://auth.kimi.com/api/oauth/token
+        client_id: "17e5f671-d194-4dfb-9706-5516cb48c098"   # oeffentl. Kimi-CLI-Client
+        scopes: ""
+        # Hinweis: adressiert den Kimi-Code-Managed-Service (api.kimi.com/coding/v1),
+        # nicht die Moonshot-Open-Platform-API.
 
     mistral:
       # Mistral AI (OpenAI-kompatible Chat-Completions, docs.mistral.ai).
       base_url: https://api.mistral.ai/v1
       api_style: openai
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: MISTRAL_API_KEY
       default_model: mistral-large-latest
@@ -99,6 +127,7 @@ llm:
       base_url: https://api.deepseek.com/v1
       api_style: openai
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: DEEPSEEK_API_KEY
       default_model: deepseek-chat
@@ -110,6 +139,7 @@ llm:
       base_url: https://api.x.ai/v1
       api_style: openai
       auth_mode: key
+      auth_method: api_key   # key-only: kein dokumentierter OAuth-Flow
       oauth_available: false
       key_env: XAI_API_KEY
       default_model: grok-2-latest

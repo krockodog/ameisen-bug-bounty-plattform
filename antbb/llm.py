@@ -194,6 +194,17 @@ def provider_status(provider: Optional[str] = None) -> dict[str, Any]:
         "key_env": cfg.key_env,          # nur der NAME der Env-Var (oder None)
         "is_default": cfg.name == DEFAULT_PROVIDER.lower(),
     }
+    # Einheitliches Auth-Modell: unterstuetzte Methoden + aktive Wahl + OAuth-Flow
+    # (nur Metadaten, nie Key-/Token-Werte).
+    try:
+        from .oauth import supported_auth_methods, selected_auth_method, oauth_flow
+        st["auth_methods"] = supported_auth_methods(cfg.name)
+        st["auth_method"] = selected_auth_method(cfg.name)
+        st["oauth_flow"] = oauth_flow(cfg.name) or None
+    except Exception:
+        st["auth_methods"] = ["none" if cfg.auth_mode == "none" else "api_key"]
+        st["auth_method"] = st["auth_methods"][0]
+        st["oauth_flow"] = None
     if cfg.name == "ollama":
         reachable = _ollama_reachable(cfg)
         st["reachable"] = reachable
