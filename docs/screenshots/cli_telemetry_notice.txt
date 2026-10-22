@@ -1,0 +1,2 @@
+[antbb] Optionale anonyme Telemetrie ist AUS (keine ANTBB_TELEMETRY_URL gesetzt) – nichts wird gesendet.
+[antbb] Optionale anonyme Telemetrie an https://telemetry.example.com/ingest ist AN – abschaltbar via ANTBB_TELEMETRY=0 oder leere ANTBB_TELEMETRY_URL.

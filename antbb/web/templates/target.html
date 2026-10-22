@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+{% block content %}
+<p><a href="/">← zurück</a></p>
+<h2>{{ target.name }} <small>#{{ target.id }}</small></h2>
+<pre class="notice">{{ notice }}</pre>
+
+<!-- ======================= LEBENDIGE AMEISEN-KARTE ======================= -->
+<section class="card antmap-card" id="antmap-card">
+  <h3>Lebende Schwarm-Karte 🐜
+    <small>Nest-Querschnitt · Königin im Thron · Agenten-Kammern · Ziel-Ausgrabung</small>
+  </h3>
+  <div id="antmap-wrap">
+    <canvas id="antmap-3d"></canvas>
+    <canvas id="antmap"></canvas>
+    <div id="antmap-tip" class="antmap-tip" hidden></div>
+
+    <!-- Königin-Kammer (klappt aus dem Hügel auf) -->
+    <div id="queen-chamber" class="queen-chamber" aria-hidden="true">
+      <div class="chamber-head">
+        <span>👑 Königin-Kammer</span>
+        <button type="button" id="chamber-close" class="chamber-x" title="schließen">✕</button>
+      </div>
+      <div class="chamber-tabs">
+        <button type="button" class="ctab active" data-tab="brain">🧠 Neuronales Gehirn</button>
+        <button type="button" class="ctab" data-tab="memgraph">🕸️ Memgraph</button>
+        <button type="button" class="ctab" data-tab="memories">📚 Memories</button>
+      </div>
+      <div id="chamber-body" class="chamber-body">lädt…</div>
+    </div>
+  </div>
+  <div class="antmap-legend">
+    <span><i class="dot idle"></i>idle</span>
+    <span><i class="dot running"></i>läuft</span>
+    <span><i class="dot done"></i>fertig</span>
+    <span><i class="dot blocked"></i>geblockt / out-of-scope</span>
+    <span class="hint">Hover (PC) / Tap (Handy) auf einen Node = Status · Tap auf 👑 = Kammer</span>
+  </div>
+  <p class="hint" id="map-mode-line"></p>
+</section>
+
+<!-- ======================= SOLDATEN-KARTEN (Octogents-Stil) ======================= -->
+<section class="card" id="soldier-section">
+  <h3>🐜 Soldaten · Skills &amp; Playbooks
+    <small id="soldier-summary">lädt…</small>
+  </h3>
+  <input type="text" id="soldier-filter" placeholder="Soldaten / Skills / Aufgaben durchsuchen…"
+         style="max-width:420px;margin:.3rem 0;">
+  <div id="octogent-phases"></div>
+  <div id="soldier-cards">lädt…</div>
+</section>
+
+<!-- ======================= GESAMT-SICHERHEITSBEWERTUNG + HEATMAP ======================= -->
+<section class="card" id="rating-section">
+  <h3>🛡️ Gesamt-Sicherheitsbewertung <small>neutral, aus verifizierten Befunden abgeleitet</small></h3>
+  <div id="rating-view">lädt…</div>
+  <h4 style="margin-top:1rem;">Risiko-Heatmap (Kategorie × Severity)</h4>
+  <div id="heatmap-view">lädt…</div>
+</section>
+
+<!-- ======================= PASSIVE WLAN-ABDECKUNG / SITE-SURVEY ======================= -->
+<section class="card" id="wlan-section">
+  <h3>📡 WLAN-Abdeckung &amp; Optimierung <small>passiv – Kanal/Störung/Funklöcher, keine Angriffe</small></h3>
+  <div id="wlan-view">lädt…</div>
+</section>
+
+<!-- ======================= AUTORISIERTES WLAN-OFFENSIV-MODUL ======================= -->
+<section class="card" id="wlan-offensive-section">
+  <h3>🗡️ WLAN-Offensiv <small>AUTORISIERT – Engagement-Gate + Oversight, default-deny</small></h3>
+  <div id="wlan-offensive-view">lädt…</div>
+</section>
+
+<section class="card mode-card">
+  <h3>Modus 🛡️</h3>
+  <p>
+    <strong>Policy:</strong>
+    <span class="badge">{{ mode.mode_policy }}</span>
+    · <strong>Effektiv:</strong>
+    {% if mode.effective_mode == "offensive" %}
+      <span class="ok">offensiv</span>
+    {% else %}
+      <span class="blocked">defensiv</span>
+    {% endif %}
+  </p>
+  <p class="hint">{{ mode.reason }}</p>
+  <p class="hint">In-Scope: {{ mode.in_scope_count }} · Oversight:
+    {% if mode.oversight %}<span class="ok">✔</span>{% else %}<span class="blocked">✘</span>{% endif %}
+  </p>
+  <form method="post" action="/target/{{ target.id }}/mode" class="inline">
+    <label>mode_policy
+      <select name="mode_policy">
+        <option value="defensive" {% if mode.mode_policy=="defensive" %}selected{% endif %}>defensive (Offensiv gesperrt)</option>
+        <option value="auto" {% if mode.mode_policy=="auto" %}selected{% endif %}>auto (Offensiv nur bei Scope+Oversight)</option>
+        <option value="offensive" {% if mode.mode_policy=="offensive" %}selected{% endif %}>offensive (Offensiv erlaubt bei Scope+Oversight)</option>
+      </select>
+    </label>
+    <button type="submit">Policy speichern</button>
+  </form>
+</section>
+
+<section class="card {% if confirmed %}ok-border{% else %}blocked-border{% endif %}">
+  <h3>Human-Oversight (Pflicht-Gate)</h3>
+  <p>Status:
+    {% if confirmed %}<span class="ok">✔ bestätigt von {{ oversight.confirmed_by }}</span>
+    {% else %}<span class="blocked">✘ NICHT bestätigt – Scan &amp; Export sind blockiert</span>{% endif %}
+  </p>
+  <form method="post" action="/target/{{ target.id }}/oversight">
+    <label><input type="checkbox" name="confirm" value="on" {% if confirmed %}checked{% endif %}>
+      {{ oversight_prompt }}</label>
+    <input type="hidden" name="by" value="web-user">
+    <button type="submit">Speichern</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Scope / Allowlist <small>(default-deny)</small></h3>
+  <table>
+    <thead><tr><th>ID</th><th>Typ</th><th>Wert</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for s in scopes %}
+      <tr><td>{{ s.id }}</td><td>{{ s.kind }}</td><td><code>{{ s.value }}</code></td>
+      <td>{% if s.allowed %}<span class="ok">in-scope</span>{% else %}<span class="blocked">out-of-scope</span>{% endif %}</td>
+      <td>
+        <form method="post" action="/target/{{ target.id }}/scope/{{ s.id }}/delete" style="display:inline">
+          <button type="submit" class="btn-danger">entfernen</button>
+        </form>
+      </td></tr>
+    {% else %}
+      <tr><td colspan="5">Kein Scope. Ohne In-Scope-Eintrag blockiert jeder Check (default-deny).</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/target/{{ target.id }}/scope/add" class="inline">
+    <select name="kind"><option>domain</option><option>ip</option><option>path</option><option>url</option></select>
+    <input name="value" required placeholder="127.0.0.1 oder example.com">
+    <label><input type="checkbox" name="allowed" value="on" checked> in-scope</label>
+    <button type="submit">+ hinzufügen</button>
+  </form>
+</section>
+
+<section class="card" id="swarm">
+  <h3>Swarm-Control 👑 <small>(on-device, kein CLI nötig)</small></h3>
+  <form method="post" action="/target/{{ target.id }}/scan" id="scan-form">
+    <label style="display:block;margin:.5rem 0;font-weight:bold">
+      <input type="checkbox" name="offensive" value="on"
+        {% if mode.offensive_allowed %}checked{% else %}disabled{% endif %}>
+      🗡️ Offensiv-Modus ENGAGIEREN (autorisiert) — führt die aktiven Angriffs-Playbooks
+      + Fuzzing aus (kein read-only Fallback). Benötigt Scope + Oversight + policy auto/offensive.
+    </label>
+    <p class="hint">Fein­steuerung (optional, wird vom Offensiv-Häkchen ohnehin aktiviert):</p>
+    <label style="display:block;margin:.5rem 0">
+      <input type="checkbox" name="active" value="on"
+        {% if not mode.offensive_allowed %}disabled{% endif %}>
+      🔬 Aktive Verifikation (autorisiert) — XSS/SQLi/Redirect/Traversal/Artefakte/CORS/Missing-Auth.
+    </label>
+    <label style="display:block;margin:.5rem 0">
+      <input type="checkbox" name="fuzz" value="on"
+        {% if not mode.offensive_allowed %}disabled{% endif %}>
+      🔬 Offensives Fuzzing (autorisiert) — GET Content-Discovery mit Catch-all-Baseline.
+    </label>
+    {% if not mode.offensive_allowed %}
+      <p class="blocked">Offensiv-Checkboxen deaktiviert: {{ mode.reason }}</p>
+    {% endif %}
+    <!-- Konsistentes Human-Oversight-Gate fuer AKTIVE/OFFENSIVE Ausloeser -->
+    <div class="card active-oversight-gate blocked-border" id="active-oversight-gate"
+         style="margin:.6rem 0;" hidden>
+      <pre class="notice">⚖ {{ active_legal_notice }}</pre>
+      <label style="display:block;margin:.3rem 0;font-weight:bold">
+        <input type="checkbox" name="oversight_active" value="on" id="oversight-active">
+        ✅ {{ active_oversight_prompt }}
+      </label>
+      <p class="hint">Default-deny: ohne dieses Human-Oversight-Häkchen wird jede
+        aktive/offensive Aktion serverseitig verweigert – es wird nichts gestartet.</p>
+    </div>
+    <button type="submit" {% if not confirmed %}disabled title="Oversight fehlt"{% endif %}>
+      🐜 Schwarm starten (asynchron · Live-Feed unten)</button>
+  </form>
+  <script>
+  (function(){
+    var form=document.getElementById("scan-form"); if(!form) return;
+    var gate=document.getElementById("active-oversight-gate");
+    var ack=document.getElementById("oversight-active");
+    var boxes=["offensive","active","fuzz"].map(function(n){return form.querySelector('[name="'+n+'"]');});
+    function anyActive(){return boxes.some(function(b){return b && !b.disabled && b.checked;});}
+    function sync(){
+      var on=anyActive();
+      gate.hidden=!on;
+      // Default-deny im UI UND serverseitig: Start nur mit Häkchen bei aktiv/offensiv.
+      if(on && ack && !ack.checked){gate.classList.add("blocked-border");}
+    }
+    boxes.forEach(function(b){if(b)b.addEventListener("change",sync);});
+    if(ack)ack.addEventListener("change",sync);
+    form.addEventListener("submit",function(e){
+      if(anyActive() && ack && !ack.checked){
+        e.preventDefault();
+        gate.hidden=false;
+        alert("Human-Oversight-Freigabe erforderlich: Bitte das Häkchen für die "+
+              "aktive/offensive Durchführung bestätigen (§202a-c).");
+      }
+    });
+    sync();
+  })();
+  </script>
+  {% if not confirmed %}<p class="blocked">Button deaktiviert: erst Oversight bestätigen.</p>{% endif %}
+</section>
+
+<section class="card" id="live">
+  <h3>Live-Status
+    <span id="scan-badge" class="badge">{{ scan_state.status }}</span>
+  </h3>
+  <pre id="live-feed" class="live-feed">Warte auf Events…</pre>
+  <p class="hint">Polling alle 1,5s · nur lokale on-device-Ausführung (kein Fernzugriff).</p>
+</section>
+
+<section class="card">
+  <h3>Findings ({{ findings|length }}) <small>nach Severity</small></h3>
+  <table>
+    <thead><tr><th>Schwere</th><th>Titel</th><th>Asset</th><th>Agent</th></tr></thead>
+    <tbody id="findings-body">
+    {% for f in findings %}
+      <tr class="sev-{{ f.severity }}"><td>{{ f.severity }}</td><td>{{ f.title }}</td><td>{{ f.asset }}</td><td>{{ f.agent }}</td></tr>
+    {% else %}
+      <tr><td colspan="4">Noch keine Findings.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card" id="report-download">
+  <h3>📄 Professioneller Pentest-Report</h3>
+  <p class="hint">Gebrandeter Bericht mit Deckblatt, Management Summary, Methodik,
+    Findings (Proof-Gate), Zählübersicht und Anhang – nur echte Store-Daten.</p>
+  <div class="row" style="gap:.6rem;flex-wrap:wrap;align-items:center">
+    <a class="btn" href="/target/{{ target.id }}/report.pdf"
+       style="display:inline-flex;align-items:center;gap:.4rem;background:var(--accent,#1f6feb);color:#fff;
+              padding:.55rem .95rem;border-radius:8px;text-decoration:none;font-weight:600">
+      📄 PDF herunterladen</a>
+    <a class="btn" href="/target/{{ target.id }}/report/print" target="_blank"
+       style="display:inline-flex;align-items:center;gap:.4rem;background:#2d333b;color:#fff;
+              padding:.55rem .95rem;border-radius:8px;text-decoration:none;font-weight:600">
+      🖨 Drucken</a>
+    <a href="/target/{{ target.id }}/branded-report" target="_blank">👀 Vorschau (HTML)</a>
+    <a id="profi-link-md" href="/target/{{ target.id }}/report/professional" target="_blank">
+      🧾 Markdown-Bericht</a>
+  </div>
+  <p class="hint" style="margin-top:.5rem">PDF benötigt weasyprint oder wkhtmltopdf auf dem Server.
+    Fehlt die Engine: ehrlicher Hinweis + druckfertiges HTML (Browser: Drucken → Als PDF speichern).</p>
+</section>
+
+<section class="card">
+  <h3>Report-Builder (8-Schritt-Evidence-Kette)</h3>
+  <div class="row" style="align-items:flex-end;gap:.5rem;margin-bottom:.5rem">
+    <label style="flex:1">Auto-Vorbefüllung aus Finding
+      <select id="prefill-finding">
+        <option value="">— Finding wählen —</option>
+        {% for f in findings %}
+          {% if f.category not in ["report-summary","proofgate-validation","llm-report","analysis-cvss","correlation","llm-analysis","poc"] %}
+          <option value="{{ f.id }}">[{{ f.severity }}] {{ f.title }} ({{ f.asset }})</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <button type="button" id="prefill-btn">↧ Vorbefüllen</button>
+    <a id="profi-link" href="/target/{{ target.id }}/report/professional" target="_blank">
+      🧾 Voller Profi-Bericht (Code + Remediation)</a>
+  </div>
+  <p class="hint" id="prefill-note">Nur echte Finding-Daten; leere Schritte zeigen einen Hinweis.</p>
+  <form method="post" action="/target/{{ target.id }}/report/add" id="report-form">
+    <label>Titel <input name="title" id="rb-title" required></label>
+    <div class="row">
+      <label>CVSS-Score <input name="cvss" id="rb-cvss" type="number" step="0.1" min="0" max="10"></label>
+      <label>CVSS-Vektor <input name="vector" id="rb-vector" placeholder="CVSS:3.1/AV:N/..."></label>
+    </div>
+    {% for key, label in chain_steps %}
+      <label>{{ label }}<textarea name="chain_{{ key }}" id="rb-chain-{{ key }}" rows="2"></textarea></label>
+    {% endfor %}
+    <button type="submit">Report speichern</button>
+  </form>
+</section>
+
+<section class="card">
+  <h3>Reports ({{ reports|length }})</h3>
+  <ul>
+  {% for r in reports %}
+    <li>#{{ r.id }} {{ r.title }} — CVSS {{ r.cvss_score }} ({{ r.severity }})
+      · <a href="/report/{{ r.id }}/view" target="_blank">ansehen</a>
+      · <a href="/report/{{ r.id }}/export?format=md" target="_blank">export md</a>
+      · <a href="/report/{{ r.id }}/export?format=json" target="_blank">export json</a>
+      {% if r.addenda %}<br><small>📎 {{ r.addenda|length }} Nachtrag/Nachträge:
+        {% for a in r.addenda %}<em>{{ a.author }}: {{ a.text }}</em>{% if not loop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+      {% if r.revisions %}<br><small>🔁 {{ r.revisions|length }} Revision(en):
+        {% for rev in r.revisions %}<a href="/report/revision/{{ rev.id }}" target="_blank">v{{ rev.revision }}</a> ({{ rev.instruction }}){% if not loop.last %} · {% endif %}{% endfor %}</small>{% endif %}
+      <details style="margin:.3rem 0">
+        <summary>Nachtrag anfügen</summary>
+        <form method="post" action="/report/{{ r.id }}/addendum" class="inline">
+          <input name="text" required placeholder="Nachtrag-Text">
+          <input name="author" value="web-user" style="width:8rem">
+          <button type="submit">+ Nachtrag</button>
+        </form>
+      </details>
+      <details style="margin:.3rem 0">
+        <summary>Neu-Anweisung (regeneriert als neue Revision)</summary>
+        <form method="post" action="/report/{{ r.id }}/reinstruct" class="inline">
+          <input name="reanweisung" required placeholder="z.B. Fokus auf kritische Funde, Remediation vertiefen">
+          <input name="author" value="web-user" style="width:8rem">
+          <button type="submit">🔁 Regenerieren</button>
+        </form>
+      </details>
+    </li>
+  {% else %}
+    <li>Keine Reports.</li>
+  {% endfor %}
+  </ul>
+  <p class="hint">Export ist durch das Oversight-Gate geschützt.</p>
+</section>
+
+<script>
+window.ANTBB = {
+  targetId: {{ target.id }},
+  mode: {{ mode|tojson }},
+  targetName: {{ target.name|tojson }}
+};
+</script>
+<script>window.ANTBB_TARGET_ID = {{ target.id }};</script>
+<script src="/static/soldiers.js"></script>
+<script src="/static/rating.js"></script>
+<script src="/static/wlan.js"></script>
+<script src="/static/wlan_offensive.js"></script>
+<script src="/static/antmap.js"></script>
+<script src="/static/antmap_colony.js"></script>
+<script type="importmap">
+{ "imports": {
+    "three": "/static/vendor/three.module.js",
+    "three/addons/": "/static/vendor/"
+} }
+</script>
+<script type="module" src="/static/antmap3d.js"></script>
+<script>
+(function () {
+  const feedEl = document.getElementById("live-feed");
+  const badge = document.getElementById("scan-badge");
+  let since = 0;
+  let lastStatus = "";
+  async function tick() {
+    try {
+      const r = await fetch("/api/feed?since=" + since);
+      const data = await r.json();
+      if (data.events && data.events.length) {
+        const lines = data.events.map(e => e.msg || JSON.stringify(e));
+        const prev = feedEl.textContent === "Warte auf Events…" ? "" : feedEl.textContent;
+        feedEl.textContent = (prev ? prev + "\n" : "") + lines.join("\n");
+        feedEl.scrollTop = feedEl.scrollHeight;
+        since = data.total;
+      }
+      if (data.agents && window.AntMap) window.AntMap.updateAgents(data.agents, data.queen);
+      if (data.scan) {
+        badge.textContent = data.scan.status +
+          (data.scan.finding_count ? " · " + data.scan.finding_count + " Findings" : "");
+        if (data.scan.status === "done" && lastStatus === "running") {
+          location.reload();
+          return;
+        }
+        lastStatus = data.scan.status;
+      }
+    } catch (e) { /* still */ }
+    setTimeout(tick, 1500);
+  }
+  tick();
+})();
+</script>
+<script>
+(function () {
+  const sel = document.getElementById("prefill-finding");
+  const btn = document.getElementById("prefill-btn");
+  const note = document.getElementById("prefill-note");
+  const profi = document.getElementById("profi-link");
+  const chainKeys = {{ chain_steps|map(attribute=0)|list|tojson }};
+  if (sel) sel.addEventListener("change", function () {
+    profi.href = "/target/{{ target.id }}/report/professional" +
+      (sel.value ? "?finding_id=" + encodeURIComponent(sel.value) : "");
+  });
+  async function prefill() {
+    if (!sel || !sel.value) { note.textContent = "Bitte zuerst ein Finding wählen."; return; }
+    note.textContent = "lädt…";
+    try {
+      const r = await fetch("/target/{{ target.id }}/report/prefill?finding_id=" + encodeURIComponent(sel.value));
+      if (!r.ok) { note.textContent = "Prefill fehlgeschlagen."; return; }
+      const d = await r.json();
+      document.getElementById("rb-title").value = d.title || "";
+      document.getElementById("rb-cvss").value = (d.cvss_score != null ? d.cvss_score : "");
+      document.getElementById("rb-vector").value = d.cvss_vector || "";
+      chainKeys.forEach(function (k) {
+        const el = document.getElementById("rb-chain-" + k);
+        if (el) el.value = (d.chain && d.chain[k]) ? d.chain[k] : "";
+      });
+      note.textContent = (d.cvss_note || "Vorbefüllt aus Finding #" + sel.value) +
+        " — leere Schritte sind klar als Hinweis markiert.";
+    } catch (e) { note.textContent = "Prefill-Fehler: " + e; }
+  }
+  if (btn) btn.addEventListener("click", prefill);
+})();
+</script>
+{% endblock %}

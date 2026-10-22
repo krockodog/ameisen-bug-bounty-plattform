@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block body_class %}home{% endblock %}
+{% block content %}
+<section class="intro-card">
+  <h2>🐜 Willkommen beim Ameisen-Schwarm</h2>
+  <p>
+    antbb ist deine <strong>lokale, autorisierte Pentest-Plattform</strong>: Eine <strong>Königin</strong>
+    (die Orchestratorin) steuert einen Schwarm aus 16 spezialisierten <strong>Ameisen-Soldaten</strong> –
+    je einer für Recon, Web, Netzwerk, Auth, OSINT, WLAN, Cloud, Exploit, Report und mehr.
+    Wie in einem echten Ameisenstaat erledigt jede Ameise ihre Aufgabe, und gemeinsam ergibt der
+    Schwarm ein vollständiges Bild der Sicherheitslage – immer nur für Ziele, für die du die
+    Erlaubnis hast.
+  </p>
+
+  <div class="intro-modes">
+    <div class="intro-mode def">
+      <strong>🛡️ Defensiv</strong>
+      Nur lesende Beobachtung. Der Schwarm sammelt und bewertet, ohne aktiv einzugreifen –
+      sicher für den Alltag.
+    </div>
+    <div class="intro-mode off">
+      <strong>⚔️ Offensiv</strong>
+      Aktive Verifikation von Schwachstellen – erst wenn <em>Scope-Allowlist</em>,
+      <em>Oversight-Häkchen</em> und der <em>Rechtshinweis (§ 202a–c StGB)</em> vorliegen.
+    </div>
+  </div>
+
+  <p class="intro-guards">
+    <strong>Feste Leitplanken:</strong>
+    Scope ist <code>default-deny</code> – getestet wird nur, was ausdrücklich erlaubt ist, der Rest
+    wird blockiert und protokolliert. Nichts Destruktives (keine Brute-Force, keine Lasterzeugung).
+    Und ein <strong>Proof-Gate</strong>: Ein Befund gilt erst als <span class="ok">VERIFIZIERT</span>,
+    wenn er aktiv nachgewiesen wurde – alles andere bleibt „Verdacht" oder „zu bestätigen".
+  </p>
+
+  <div class="didyouknow">
+    <span class="dyk-ant">🐜</span>
+    <span><b>Wusstest du?</b> <span id="dyk-fact">Lädt …</span></span>
+  </div>
+</section>
+
+<section class="card mode-card" id="fernzugriff">
+  <h3>🔐 Fernzugriff</h3>
+  <p class="hint">Standardmäßig läuft antbb <strong>nur lokal</strong> ({{ remote.local_url }}).
+    Du entscheidest selbst, ob und wie die GUI aus der Ferne erreichbar sein soll.
+    Die Auswahl <strong>speichert nur deine Präferenz</strong> – es wird nichts gestartet
+    und nichts ins Internet exponiert. Den jeweiligen Transport fährst du anhand der
+    Schritte unten selbst hoch.</p>
+
+  <form method="post" action="/remote/set">
+    <label style="display:block;margin:.3rem 0">
+      <input type="radio" name="mode" value="off" {% if remote.mode == "off" %}checked{% endif %}>
+      <strong>Aus (nur lokal)</strong> – sicherste Einstellung, nichts exponiert.
+    </label>
+    <label style="display:block;margin:.3rem 0">
+      <input type="radio" name="mode" value="tailscale" {% if remote.mode == "tailscale" %}checked{% endif %}>
+      <strong>Tailscale</strong> – privates Mesh-VPN (Tailnet), nicht öffentlich.
+      {% if remote.tailscale.installed %}
+        {% if remote.tailscale.running and remote.tailscale.ip %}
+          <span class="ok">● aktiv · {{ remote.tailscale.ip }}</span>
+        {% else %}
+          <span class="blocked">● installiert, nicht aktiv</span>
+        {% endif %}
+      {% else %}
+        <span class="blocked">● nicht installiert</span>
+      {% endif %}
+    </label>
+    <label style="display:block;margin:.3rem 0">
+      <input type="radio" name="mode" value="cloudflare" {% if remote.mode == "cloudflare" %}checked{% endif %}>
+      <strong>Cloudflare-Tunnel</strong> – über das <em>öffentliche</em> Internet (nur mit eigener Auth nutzen).
+      {% if remote.cloudflare.installed %}
+        <span class="ok">● installiert{% if remote.cloudflare.version %} · {{ remote.cloudflare.version }}{% endif %}</span>
+      {% else %}
+        <span class="blocked">● nicht installiert</span>
+      {% endif %}
+    </label>
+    <button type="submit">Speichern</button>
+  </form>
+
+  <p class="hint" style="margin-top:.6rem">
+    <strong>Aktiver Modus:</strong>
+    {% if remote.mode == "off" %}<span class="badge">Aus (nur lokal)</span>
+    {% elif remote.mode == "tailscale" %}<span class="badge">Tailscale</span>
+    {% else %}<span class="badge">Cloudflare-Tunnel</span>{% endif %}
+    {% if remote.active_url %} · erreichbar unter <code>{{ remote.active_url }}</code>{% endif %}
+  </p>
+
+  <details style="margin-top:.4rem">
+    <summary>Setup-Schritte für „{{ remote.mode }}“ anzeigen</summary>
+    <ol class="hint">
+      {% for step in remote_steps %}<li>{{ step }}</li>{% endfor %}
+    </ol>
+    <p class="hint">Ein etwaiges Cloudflare-Token liest ausschließlich <code>cloudflared</code>
+      zur Laufzeit aus der Umgebungsvariable <code>{{ remote.token_env_name }}</code> –
+      antbb speichert oder loggt es <strong>nie</strong>.</p>
+  </details>
+
+  <div style="margin-top:.8rem;padding:.6rem;border:1px solid #333;border-radius:8px">
+    <strong>Cloudflare-Tunnel aktiv steuern</strong>
+    <p class="hint" style="margin:.3rem 0">
+      ⚠ Ein Tunnel macht die GUI über das <em>öffentliche</em> Internet erreichbar.
+      Start erfordert deine ausdrückliche Bestätigung (Oversight).
+    </p>
+    <label style="display:block;margin:.3rem 0">
+      <input type="checkbox" id="cf-oversight"> Ich bestätige: GUI öffentlich per Cloudflare-Tunnel verfügbar machen.
+    </label>
+    <label style="display:block;margin:.3rem 0">
+      <input type="checkbox" id="cf-named"> Benannter Tunnel (Token aus <code>{{ remote.token_env_name }}</code>) statt trycloudflare
+    </label>
+    <button type="button" id="cf-start" onclick="cfTunnel('start')">Tunnel starten</button>
+    <button type="button" id="cf-stop" onclick="cfTunnel('stop')">Tunnel stoppen</button>
+    <span id="cf-state" class="hint" style="margin-left:.5rem">
+      {% if remote.cloudflare.tunnel and remote.cloudflare.tunnel.running %}
+        ● läuft{% if remote.cloudflare.tunnel.url %} · <code>{{ remote.cloudflare.tunnel.url }}</code>{% endif %}
+      {% else %}● aus{% endif %}
+    </span>
+    <div id="cf-msg" class="hint" style="margin-top:.4rem"></div>
+  </div>
+  <script>
+  async function cfTunnel(action){
+    const msg=document.getElementById('cf-msg');
+    const st=document.getElementById('cf-state');
+    try{
+      let res;
+      if(action==='start'){
+        const confirm=document.getElementById('cf-oversight').checked;
+        const named=document.getElementById('cf-named').checked;
+        if(!confirm){ msg.textContent='Bitte zuerst die Oversight-Bestätigung ankreuzen.'; return; }
+        msg.textContent='Starte Tunnel…';
+        res=await fetch('/api/remote/tunnel/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirm:true,named:named})});
+      } else {
+        msg.textContent='Stoppe Tunnel…';
+        res=await fetch('/api/remote/tunnel/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+      }
+      const d=await res.json();
+      msg.textContent=(d.reason||'')+(d.url?(' → '+d.url):'');
+      if(d.running){ st.innerHTML='● läuft'+(d.url?(' · <code>'+d.url+'</code>'):''); }
+      else { st.textContent='● aus'; }
+    }catch(e){ msg.textContent='Fehler: '+e; }
+  }
+  </script>
+</section>
+
+<section>
+  <h2>Targets &amp; Scope-Manager
+    <a href="/trash" class="trash-link" title="Archivierte Targets (Soft-Delete)">🗑 Papierkorb{% if archived_count %} ({{ archived_count }}){% endif %}</a>
+  </h2>
+  <p class="hint">Alles läuft on-device über diese GUI – kein CLI-Copy-Paste nötig.
+    Offensiv nur bei Scope + Oversight (mode_policy=auto/offensive).
+    Archivieren verschiebt ein Target in den Papierkorb (wiederherstellbar) –
+    die Königin behält ihr gesamtes Wissen (Findings, Registry, Erinnerungen).</p>
+  <table>
+    <thead><tr><th>ID</th><th>Name</th><th>Scope</th><th>Oversight</th><th>Modus</th><th></th></tr></thead>
+    <tbody>
+    {% for t in targets %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td>{{ t.name }}</td>
+        <td>{{ t.scope_count }}</td>
+        <td>{% if t.confirmed %}<span class="ok">✔ bestätigt</span>{% else %}<span class="blocked">✘ offen</span>{% endif %}</td>
+        <td>
+          <span class="badge">{{ t.mode.mode_policy }}</span>
+          {% if t.mode.effective_mode == "offensive" %}
+            <span class="ok">offensiv</span>
+          {% else %}
+            <span class="blocked">defensiv</span>
+          {% endif %}
+        </td>
+        <td>
+          <a href="/target/{{ t.id }}">öffnen →</a>
+          <form method="post" action="/target/{{ t.id }}/archive" style="display:inline"
+                onsubmit="return confirm('Target „{{ t.name }}“ in den Papierkorb verschieben? Es wird nur ausgeblendet – alle Daten und das Wissen der Königin bleiben erhalten und sind wiederherstellbar.');">
+            <button type="submit" class="btn-archive" title="In den Papierkorb (Soft-Delete, wiederherstellbar)">🗑 Archivieren</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">Noch keine Targets. Lege unten eines an.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+<section class="card">
+  <h3>Neues Target</h3>
+  <form method="post" action="/target/add">
+    <label>Name <input name="name" required placeholder="z.B. 127.0.0.1-lab"></label>
+    <label>Beschreibung <input name="description" placeholder="optional"></label>
+    <label>mode_policy
+      <select name="mode_policy">
+        <option value="auto" selected>auto (Offensiv nur bei Scope+Oversight)</option>
+        <option value="defensive">defensive (nur defensiv)</option>
+        <option value="offensive">offensive (Offensiv erlaubt bei Scope+Oversight)</option>
+      </select>
+    </label>
+    <button type="submit">Anlegen</button>
+  </form>
+</section>
+
+<script>
+// Wusstest du? – echte, gängige Infosec-Fakten (keine Erfindungen), rotierend.
+(function () {
+  var facts = [
+    "Platz 1 der <b>OWASP Top 10 (2021)</b> ist <b>Broken Access Control</b> – also fehlerhafte Zugriffskontrolle. Deshalb prüfen unsere Soldaten besonders, wer worauf zugreifen darf.",
+    "Ein <b>WPA2-Handshake</b> ist der 4-Wege-Austausch, mit dem sich ein Gerät beim WLAN anmeldet. Wird er mitgeschnitten, kann ein Passwort <b>offline</b> geraten werden – ganz ohne weiteren Funkkontakt. Darum sind starke, lange Passphrasen so wichtig.",
+    "<b>Default-deny</b> heißt: erlaubt ist nur, was ausdrücklich freigegeben wurde. Das verhindert, dass versehentlich fremde Systeme getestet werden – die sicherste Grundeinstellung für jeden Scope.",
+    "Laut Verizon DBIR ist der <b>Mensch</b> an der großen Mehrheit der Sicherheitsvorfälle beteiligt – etwa über Phishing oder schwache bzw. gestohlene Passwörter. Technik allein reicht nicht.",
+    "<b>HTTPS/TLS</b> schützt den Transportweg (das Mitlesen unterwegs), aber nicht die Anwendung selbst. Eine Seite kann verschlüsselt und trotzdem verwundbar sein.",
+    "<b>SQL-Injection</b> gehört zur OWASP-Kategorie <b>Injection</b> und entsteht, wenn Eingaben ungeprüft in Datenbankabfragen landen. Schutz: parametrisierte Abfragen (Prepared Statements).",
+    "<b>Multi-Faktor-Authentifizierung (MFA)</b> stoppt den Großteil der Angriffe auf gestohlene Passwörter, weil ein geklautes Passwort allein nicht mehr genügt.",
+    "Ein guter Pentest-Befund braucht einen <b>Nachweis</b>. Unser Proof-Gate führt etwas erst als „VERIFIZIERT", wenn es aktiv belegt ist – das verhindert Fehlalarme und übertriebene Risiko-Einstufungen."
+  ];
+  var el = document.getElementById("dyk-fact");
+  if (!el) return;
+  var i = Math.floor(Math.random() * facts.length);
+  function show() { el.innerHTML = facts[i]; el.style.opacity = 1; }
+  show();
+  setInterval(function () {
+    el.style.opacity = 0;
+    setTimeout(function () { i = (i + 1) % facts.length; show(); }, 400);
+  }, 9000);
+})();
+</script>
+{% endblock %}

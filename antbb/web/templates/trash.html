@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Papierkorb · antbb 🐜{% endblock %}
+{% block content %}
+<section>
+  <h2>🗑 Papierkorb – archivierte Targets</h2>
+  <p class="hint">
+    Hier liegen Targets, die aus der aktiven Liste entfernt (archiviert) wurden.
+    Das ist ein <strong>Soft-Delete</strong>: Es wurde <em>nichts</em> gelöscht –
+    Scopes, Findings, Scan-Historie, WLAN-Daten und Reports bleiben vollständig
+    in der Datenbank. Vor allem behält die <strong>Königin ihr gesamtes Wissen</strong>
+    (Neural-Brain / Registry der Skills, Playbooks und Tools sowie ihre
+    Erinnerungen) – Archivieren berührt es nicht. Archivierte Targets sind von
+    aktiven Scans ausgeschlossen, bis sie wiederhergestellt werden.
+  </p>
+  <p><a href="/">← zurück zu den aktiven Targets</a></p>
+
+  <table>
+    <thead><tr>
+      <th>ID</th><th>Name</th><th>Scope</th><th>Findings</th><th>Reports</th>
+      <th>archiviert am</th><th></th>
+    </tr></thead>
+    <tbody>
+    {% for t in targets %}
+      <tr>
+        <td>{{ t.id }}</td>
+        <td>{{ t.name }}</td>
+        <td>{{ t.scope_count }}</td>
+        <td>{{ t.finding_count }}</td>
+        <td>{{ t.report_count }}</td>
+        <td>{{ t.archived_fmt }}</td>
+        <td>
+          <form method="post" action="/target/{{ t.id }}/restore" style="display:inline">
+            <button type="submit" class="btn-restore" title="Aus dem Papierkorb zurückholen">↩ Wiederherstellen</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7">Der Papierkorb ist leer.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

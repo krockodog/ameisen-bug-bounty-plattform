@@ -1,0 +1,422 @@
+:root { --bg:#05070c; --bg2:#080b12; --card:#10141d; --fg:#e8ecf5; --muted:#8a92a6;
+  --ok:#3fb950; --blk:#f85149; --accent:#d29922; --glow:#38e0ff; }
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui, sans-serif; color:var(--fg);
+  background:
+    radial-gradient(1100px 650px at 80% -10%, rgba(56,224,255,.05), transparent 60%),
+    radial-gradient(900px 600px at 10% 110%, rgba(210,153,34,.05), transparent 60%),
+    linear-gradient(180deg, #05070c, #070a11);
+  background-attachment: fixed; min-height:100vh; position:relative; }
+
+/* ---- Zufaelliger Kolonie-Hintergrund (site-weit, in base.html gesetzt) ---- */
+/* Das Bild selbst kommt per inline <style> aus base.html (variiert je Reload).
+   Hier nur Position/Scrim/Lesbarkeit: fixiert, leicht abgedunkelt+weichgezeichnet. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -2; pointer-events: none;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  filter: brightness(.62) saturate(1.0) blur(1px);
+}
+/* zusaetzlicher kuehler Schleier fuer gleichmaessige Lesbarkeit ueber allem */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(1200px 800px at 50% 28%, rgba(5,7,12,.08), rgba(4,6,11,.52) 88%),
+    linear-gradient(180deg, rgba(6,9,16,.30), rgba(4,6,11,.58));
+}
+header { padding:1rem 1.5rem;
+  background:linear-gradient(180deg, rgba(10,13,20,.92), rgba(7,10,17,.78));
+  border-bottom:1px solid #1b2130; backdrop-filter:blur(6px);
+  display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;
+  position:relative; z-index:3;
+  box-shadow:0 1px 0 rgba(56,224,255,.08), 0 8px 30px rgba(0,0,0,.45); }
+header h1 { font-size:1.1rem; margin:0; color:#eef3ff;
+  text-shadow:0 0 14px rgba(56,224,255,.25); }
+header nav { display:flex; align-items:center; gap:.2rem; font-size:.95rem; }
+header nav a, main a { color:var(--accent); text-decoration:none; }
+/* ---- Menue-Hover: sanftes Glow/Underline + Bloom ---- */
+header nav a {
+  position:relative; cursor:pointer; padding:.35rem .6rem; border-radius:7px;
+  color:#cfe0ff; font-weight:600; letter-spacing:.01em;
+  transition:color .18s ease, background .18s ease, text-shadow .22s ease, box-shadow .22s ease;
+}
+header nav a::after {
+  content:""; position:absolute; left:.6rem; right:.6rem; bottom:.15rem; height:2px;
+  background:linear-gradient(90deg, transparent, var(--glow), transparent);
+  transform:scaleX(0); transform-origin:center; opacity:0;
+  transition:transform .22s ease, opacity .22s ease;
+  box-shadow:0 0 8px var(--glow);
+}
+header nav a:hover, header nav a:focus-visible {
+  color:#ffffff; background:rgba(56,224,255,.08); outline:none;
+  text-shadow:0 0 10px rgba(56,224,255,.7), 0 0 20px rgba(56,224,255,.35);
+  box-shadow:0 0 0 1px rgba(56,224,255,.25) inset, 0 0 18px rgba(56,224,255,.18);
+}
+header nav a:hover::after, header nav a:focus-visible::after { transform:scaleX(1); opacity:1; }
+@media (prefers-reduced-motion: reduce){
+  header nav a, header nav a::after { transition:none; }
+}
+.badge { font-size:.7rem; background:#262a33; color:var(--muted); padding:.1rem .4rem; border-radius:4px; }
+main { padding:1.5rem; max-width:980px; margin:0 auto; }
+main { position:relative; z-index:2; }
+.card { background:linear-gradient(180deg, rgba(16,20,29,.94), rgba(11,14,21,.94));
+  border:1px solid #20283a; border-radius:8px; padding:1rem 1.25rem; margin:1rem 0;
+  box-shadow:0 6px 24px rgba(0,0,0,.35); backdrop-filter:blur(2px); }
+/* Bloom auf Akzent-Raendern/Chips */
+.ok-border { box-shadow:0 0 16px rgba(63,185,80,.18); }
+.blocked-border { box-shadow:0 0 16px rgba(248,81,73,.18); }
+.mode-card { box-shadow:0 0 18px rgba(59,130,246,.20); }
+h2, h3 { text-shadow:0 0 12px rgba(56,224,255,.12); }
+.intro-mode.def { box-shadow:0 0 14px rgba(63,185,80,.14); }
+.intro-mode.off { box-shadow:0 0 14px rgba(248,81,73,.14); }
+.ok-border { border-color:var(--ok); } .blocked-border { border-color:var(--blk); }
+h2,h3 { margin-top:0; }
+table { width:100%; border-collapse:collapse; margin:.5rem 0; }
+th,td { text-align:left; padding:.4rem .5rem; border-bottom:1px solid #262a33; font-size:.9rem; }
+.ok { color:var(--ok); } .blocked { color:var(--blk); }
+form label { display:block; margin:.4rem 0; font-size:.9rem; }
+input, select, textarea { background:#0f1115; color:var(--fg); border:1px solid #30353f;
+  border-radius:4px; padding:.4rem; width:100%; max-width:420px; }
+form.inline input, form.inline select { width:auto; display:inline-block; }
+.row { display:flex; gap:1rem; flex-wrap:wrap; }
+button { background:var(--accent); color:#1a1d24; border:none; border-radius:5px;
+  padding:.5rem .9rem; font-weight:600; cursor:pointer; margin-top:.5rem; }
+button:disabled { background:#444; color:#999; cursor:not-allowed; }
+pre.notice, pre.disclaimer { background:#0b0d11; padding:.75rem; border-radius:6px;
+  font-size:.8rem; white-space:pre-wrap; color:var(--muted); }
+.sev-critical td { color:#ff7b72; } .sev-high td { color:#f0883e; }
+.sev-medium td { color:#d29922; } .sev-low td { color:#58a6ff; }
+.hint, small { color:var(--muted); font-size:.8rem; }
+footer { padding:1rem 1.5rem; border-top:1px solid #262a33; color:var(--muted); }
+
+/* --- GUI-Erweiterungen (Modus, Live-Feed, Danger-Button) --- */
+.mode-card { border-color: #3b82f6; }
+.live-feed {
+  background: #0b0d11; color: #c9d1d9; padding: .75rem; border-radius: 6px;
+  font-size: .78rem; max-height: 280px; overflow-y: auto; white-space: pre-wrap;
+  min-height: 4rem;
+}
+.btn-danger {
+  background: #f85149; color: #fff; font-size: .75rem; padding: .25rem .5rem;
+  margin-top: 0;
+}
+code { font-size: .85em; color: #79c0ff; }
+#scan-badge { font-size: .85rem; }
+
+/* ===================== Lebende Schwarm-Karte ===================== */
+.antmap-card { border-color:#223; background:linear-gradient(180deg,#121725,#0d1119); }
+#antmap-wrap { position:relative; width:100%; border-radius:10px; overflow:hidden;
+  border:1px solid #1d2740; box-shadow:0 0 40px rgba(40,120,200,.08) inset; }
+#antmap { position:relative; z-index:2; display:block; width:100%; touch-action:manipulation; }
+/* additiver 3D-Layer liegt transparent HINTER dem 2D-Canvas */
+#antmap-3d { position:absolute; left:0; top:0; z-index:1; display:block;
+  pointer-events:none; }
+.antmap-tip { position:absolute; z-index:20; pointer-events:none; max-width:240px;
+  background:rgba(10,14,24,.96); border:1px solid #2e6; border-color:rgba(80,220,200,.5);
+  color:#e8eefc; font-size:.75rem; line-height:1.35; padding:.5rem .6rem; border-radius:8px;
+  box-shadow:0 6px 24px rgba(0,0,0,.6); }
+.antmap-tip .r { color:#9fb0cc; }
+.antmap-legend { display:flex; flex-wrap:wrap; gap:.8rem; align-items:center;
+  margin-top:.6rem; font-size:.75rem; color:#9fb0cc; }
+.antmap-legend .dot { display:inline-block; width:10px; height:10px; border-radius:50%;
+  margin-right:.3rem; vertical-align:middle; box-shadow:0 0 6px currentColor; }
+.dot.idle{ background:#7d8799; color:#7d8799;} .dot.running{ background:#38e0ff; color:#38e0ff;}
+.dot.done{ background:#3fffa3; color:#3fffa3;} .dot.blocked{ background:#ff4d8d; color:#ff4d8d;}
+#map-mode-line { margin-top:.5rem; }
+
+/* ---- Königin-Kammer (klappt aus dem Hügel auf) ---- */
+.queen-chamber { position:absolute; left:50%; bottom:0; transform:translateX(-50%);
+  width:min(540px, 94%); max-height:0; opacity:0; overflow:hidden; z-index:15;
+  background:linear-gradient(180deg, rgba(18,24,40,.98), rgba(10,14,24,.99));
+  border:1px solid rgba(120,160,230,.35); border-bottom:none;
+  border-radius:14px 14px 0 0; box-shadow:0 -10px 40px rgba(0,0,0,.6), 0 0 30px rgba(90,150,255,.12);
+  transition:max-height .45s cubic-bezier(.22,.9,.3,1), opacity .35s ease;
+  backdrop-filter:blur(3px); }
+.queen-chamber.open { max-height:440px; opacity:1; }
+.chamber-head { display:flex; justify-content:space-between; align-items:center;
+  padding:.5rem .8rem; font-weight:600; color:#ffd98a;
+  border-bottom:1px solid rgba(120,160,230,.2); background:rgba(255,200,100,.05); }
+.chamber-x { background:transparent; color:#9fb0cc; border:none; font-size:1rem; cursor:pointer; margin:0; padding:.1rem .4rem; }
+.chamber-tabs { display:flex; gap:.3rem; padding:.5rem .6rem 0; flex-wrap:wrap; }
+.chamber-tabs .ctab { background:rgba(40,52,80,.6); color:#c7d2ec; border:1px solid rgba(120,160,230,.25);
+  border-radius:8px 8px 0 0; font-size:.76rem; font-weight:600; padding:.4rem .6rem; margin:0; cursor:pointer; }
+.chamber-tabs .ctab.active { background:rgba(80,120,210,.35); color:#fff; border-color:rgba(130,180,255,.6); }
+.chamber-body { padding:.6rem .85rem 1rem; overflow-y:auto; max-height:350px; font-size:.8rem; color:#dde6f6; }
+.cham-sec h4 { margin:.2rem 0 .5rem; color:#8fe3ff; }
+.cham-list { margin:.2rem 0 .6rem; padding-left:1.1rem; }
+.cham-list li { margin:.15rem 0; }
+.cham-links { margin-top:.5rem; }
+.cham-links a { color:#7af0d0; }
+.memgraph-svg { width:100%; background:radial-gradient(circle at 50% 45%, #0f1626, #0a0e18);
+  border:1px solid rgba(120,160,230,.2); border-radius:10px; }
+@media (max-width:560px){
+  .queen-chamber.open { max-height:70vh; }
+  .chamber-body { max-height:52vh; }
+}
+@media (prefers-reduced-motion: reduce){
+  .queen-chamber { transition:none; }
+}
+
+/* ===================== Bühne: gemalter Nest-Querschnitt ===================== */
+#antmap-colony { position:absolute; inset:0; z-index:0; overflow:hidden; }
+#antmap-stage { position:absolute; inset:0; display:block; width:100%; height:100%; }
+#antmap-colony-fx { position:absolute; left:0; top:0; pointer-events:none; mix-blend-mode:screen; }
+
+/* ===== Soldaten-Karten (Octogents-Stil) ===== */
+#soldier-cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:.9rem; }
+.soldier-card { background:linear-gradient(180deg,#0e1322,#0a0d16); border:1px solid #1d2740;
+  border-radius:6px; padding:.6rem .7rem; font-size:.82rem; box-shadow:0 0 20px rgba(40,120,200,.06) inset; }
+.sc-head { display:flex; align-items:center; gap:.5rem; }
+.sc-avatar { font-size:1.3rem; filter:drop-shadow(0 0 4px rgba(120,180,255,.5)); }
+.sc-id { flex:1; min-width:0; }
+.sc-name { font-weight:700; letter-spacing:.04em; color:#9fd0ff; text-transform:uppercase; font-size:.8rem; }
+.sc-role { color:var(--muted); font-size:.72rem; line-height:1.2; }
+.sc-badge { font-family:monospace; font-size:.75rem; background:#111a2b; border:1px solid #2a3a5a;
+  color:#8a92a6; padding:.1rem .4rem; border-radius:4px; }
+.sc-badge.part { color:#ffcf7a; border-color:#5a4a2a; }
+.sc-badge.full { color:#3fffa3; border-color:#2a5a46; }
+.sc-tabs { display:flex; gap:.25rem; margin:.5rem 0 .3rem; }
+.sc-tabs button { background:#101726; color:#8a92a6; border:1px solid #1d2740; border-radius:4px;
+  padding:.2rem .55rem; font-size:.72rem; font-weight:600; margin:0; }
+.sc-tabs button.active { background:#17233c; color:#9fd0ff; border-color:#38507e; }
+.sc-bar { height:4px; background:#121a2b; border-radius:3px; overflow:hidden; margin:.2rem 0 .4rem; }
+.sc-bar span { display:block; height:100%; width:0; background:linear-gradient(90deg,#38e0ff,#3fffa3); transition:width .3s; }
+.sc-body { max-height:280px; overflow:auto; }
+.pb { border:1px solid #182236; border-radius:4px; padding:.35rem .45rem; margin:.3rem 0; background:#0b1120; }
+.pb-off { opacity:.5; }
+.pb-head { display:flex; justify-content:space-between; align-items:center; gap:.4rem; }
+.pb-en { font-size:.76rem; color:#cfe0ff; font-weight:600; margin:0; }
+.pb-en input { width:auto; margin-right:.3rem; }
+.pb-mode { font-size:.62rem; padding:.05rem .35rem; border-radius:3px; background:#122; color:#7affd1; }
+.pb-mode.offensive { background:#2a1420; color:#ff7b9c; }
+.pb-desc { color:var(--muted); font-size:.7rem; margin:.15rem 0; }
+ul.tasks { list-style:none; margin:.2rem 0 0; padding:0; }
+ul.tasks li { display:flex; align-items:center; gap:.3rem; font-size:.74rem; padding:.1rem 0; }
+ul.tasks li label { margin:0; flex:1; display:flex; align-items:center; gap:.3rem; }
+ul.tasks li input { width:auto; }
+.tstat { font-size:.6rem; padding:0 .3rem; border-radius:3px; }
+.tstat.open { color:#7d8799; } .tstat.done { color:#3fffa3; }
+.tov { font-size:.65rem; }
+.sc-files { display:flex; flex-wrap:wrap; gap:.3rem; margin-top:.45rem; border-top:1px solid #182236; padding-top:.4rem; }
+.chip { font-size:.66rem; background:#101726; border:1px solid #223; color:#8fb4e8; padding:.1rem .4rem;
+  border-radius:3px; cursor:pointer; }
+.chip:hover { background:#17233c; }
+.vault-grid { display:flex; flex-wrap:wrap; gap:.3rem; margin:.3rem 0; }
+.vfile { background:#101726; color:#8fb4e8; border:1px solid #223; font-size:.7rem; padding:.2rem .45rem; margin:0; }
+.vault-pre { background:#06080e; font-size:.7rem; max-height:200px; overflow:auto; white-space:pre-wrap; }
+.mem-add textarea { width:100%; max-width:none; min-height:48px; font-size:.75rem; }
+.mem-list { list-style:none; padding:0; margin:.3rem 0 0; }
+.mem-list li { display:flex; justify-content:space-between; gap:.4rem; font-size:.74rem;
+  border-bottom:1px solid #182236; padding:.2rem 0; }
+.mem-del { background:#2a1420; color:#ff7b9c; padding:0 .4rem; margin:0; font-size:.7rem; }
+
+/* ===== Risiko-Heatmap ===== */
+.heatmap-grid { border-collapse:collapse; font-size:.74rem; }
+.heatmap-grid th, .heatmap-grid td { border:1px solid #1d2740; padding:.3rem .5rem; text-align:center; }
+.heatmap-grid th { background:#101726; color:#9fd0ff; }
+.heatmap-grid td.hm-dim { text-align:left; color:#cfe0ff; background:#0b1120; white-space:nowrap; }
+.hm-cell { color:#e6e6e6; font-family:monospace; }
+.hm-empty { color:#39405a; }
+
+/* ===== Octogent-Phasenmodell ===== */
+.phase-strip { display:flex; gap:.5rem; flex-wrap:wrap; margin:.4rem 0 .6rem; }
+.phase-box { flex:1; min-width:150px; background:#0b1120; border:1px solid #1d2740;
+  border-radius:5px; padding:.4rem .5rem; }
+.phase-box.ph-off { border-color:#4a2a3a; }
+.phase-name { font-weight:700; font-size:.74rem; color:#9fd0ff; }
+.phase-sol { font-size:.7rem; color:#cfe0ff; margin:.15rem 0; }
+.phase-tools { font-size:.65rem; }
+
+/* ---- WLAN-Survey (passiv) ---- */
+#wlan-section h4 { margin: .9rem 0 .35rem; }
+table.wlan-aps { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.wlan-aps th, table.wlan-aps td { padding: .25rem .4rem; border-bottom: 1px solid #222838; text-align: left; }
+.wlan-warn { background: rgba(255,123,107,.08); border: 1px solid #ff7b6b; border-radius: 8px; padding: .5rem .8rem; margin: .4rem 0; }
+.wlan-warn ul { margin: .3rem 0 0 1rem; }
+.wlan-band { margin: .4rem 0; }
+.wlan-chbars { display: flex; gap: .3rem; align-items: flex-end; height: 70px; }
+.wlan-chbar { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; width: 26px; height: 100%; }
+.wlan-chbar-fill { width: 18px; border-radius: 3px 3px 0 0; }
+.wlan-chbar-lbl { font-size: .7rem; color: #8a92a6; margin-top: 2px; }
+.wlan-coverage { display: flex; flex-wrap: wrap; gap: .5rem; }
+.wlan-point { border: 1px solid #333; border-radius: 10px; padding: .5rem .7rem; min-width: 120px; background: #141a26; }
+.wlan-point-label { font-weight: 600; }
+.wlan-point-rssi { font-size: 1.2rem; font-weight: 700; }
+.wlan-recs { margin: .3rem 0 0 1rem; }
+.wlan-recs li { margin: .2rem 0; }
+
+/* ---- WLAN-Menü: Sub-Tab-Leiste (gleiche Optik wie Königin-Kammer-Tabs) ---- */
+.wlan-tabs { display:flex; gap:.4rem; flex-wrap:wrap; margin:.6rem 0 .2rem; }
+.wlan-tabs .wtab { background:rgba(40,52,80,.6); color:#c7d2ec;
+  border:1px solid rgba(120,160,230,.25); border-radius:7px 7px 0 0;
+  padding:.45rem .8rem; font-weight:600; cursor:pointer; margin-top:0; }
+.wlan-tabs .wtab.active { background:rgba(80,120,210,.35); color:#fff;
+  border-color:rgba(130,180,255,.6); }
+.wlan-tabs .wtab-offensive { color:#ff9f93; border-color:rgba(248,81,73,.45); }
+.wlan-tabs .wtab-offensive.active { background:rgba(248,81,73,.22);
+  color:#fff; border-color:#f85149; }
+.wlan-offensive-panel { background:#1c1518; }
+
+/* ---- WLAN scan-first Toolbar / klickbare AP-Tabelle ---- */
+.wlan-toolbar {
+  background: rgba(12,16,26,.72);
+  border: 1px solid rgba(120,160,230,.22);
+  border-radius: 12px;
+  padding: .7rem .85rem;
+  margin: .4rem 0 .7rem;
+  box-shadow: 0 0 18px rgba(80,140,255,.08);
+}
+.wlan-toolbar-row {
+  display: flex; flex-wrap: wrap; gap: .55rem; align-items: flex-end;
+}
+.wlan-field { display: flex; flex-direction: column; gap: .2rem;
+  font-size: .72rem; color: #9aa6c3; font-weight: 600; letter-spacing: .02em; }
+.wlan-field.grow { flex: 1 1 180px; min-width: 160px; }
+.wlan-field select, .wlan-field input[type="search"],
+.wlan-field input[type="text"] {
+  background: #0d121c; color: #e8eefc; border: 1px solid #2a3348;
+  border-radius: 8px; padding: .4rem .55rem; font-size: .9rem; min-width: 140px;
+}
+.wlan-field select:focus, .wlan-field input:focus {
+  outline: none; border-color: #5a8dff;
+  box-shadow: 0 0 0 2px rgba(90,141,255,.25);
+}
+.wlan-field.wlan-check { flex-direction: row; align-items: center; gap: .4rem;
+  padding-bottom: .35rem; font-weight: 500; color: #c7d2ec; }
+button.wlan-primary {
+  background: linear-gradient(180deg, #3d6fe0, #2a4fad);
+  color: #fff; border: 1px solid #6a9bff; border-radius: 8px;
+  padding: .5rem 1rem; font-weight: 700; cursor: pointer;
+  box-shadow: 0 0 14px rgba(80,140,255,.35);
+}
+button.wlan-primary:hover { filter: brightness(1.1); }
+button.wlan-ghost {
+  background: transparent; color: #9aa6c3; border: 1px solid #2a3348;
+  border-radius: 8px; padding: .35rem .7rem; cursor: pointer;
+}
+.wlan-status { margin-top: .55rem; font-size: .85rem; color: #9aa6c3; }
+.wlan-status.busy { color: #7ad0ff; }
+.wlan-status.ok { color: #3fffa3; }
+.wlan-status.warn { color: #ffcf7a; }
+.wlan-status.err { color: #ff6b6b; }
+
+.wlan-selection {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem;
+  align-items: center; border-radius: 10px; padding: .55rem .8rem; margin: .5rem 0;
+  border: 1px dashed #2a3348; background: rgba(20,26,38,.6); color: #8a92a6;
+}
+.wlan-selection.active {
+  border-style: solid; border-color: #3fffa3;
+  background: rgba(63,255,163,.06);
+  box-shadow: 0 0 16px rgba(63,255,163,.12); color: #e8eefc;
+}
+.wlan-sel-main { display: flex; flex-wrap: wrap; gap: .45rem; align-items: center; }
+.wlan-sel-ssid { font-weight: 700; font-size: 1.05rem; }
+.wlan-sel-bssid { font-size: .85rem; }
+.wlan-sel-actions { display: flex; gap: .35rem; flex-wrap: wrap; }
+.wlan-badge-conn { border-color: #3fffa3 !important; color: #3fffa3 !important; }
+
+.wlan-table-scroll {
+  overflow-x: auto; border: 1px solid #222838; border-radius: 10px;
+  background: rgba(10,14,22,.55); max-height: 420px; overflow-y: auto;
+}
+table.wlan-aps-interactive thead th {
+  position: sticky; top: 0; background: #121826; z-index: 1;
+  font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8a92a6;
+}
+table.wlan-aps-interactive tr.wlan-ap-row { cursor: pointer; transition: background .12s; }
+table.wlan-aps-interactive tr.wlan-ap-row:hover { background: rgba(80,120,210,.12); }
+table.wlan-aps-interactive tr.wlan-ap-row.selected {
+  background: rgba(63,255,163,.1);
+  outline: 1px solid rgba(63,255,163,.45);
+}
+table.wlan-aps-interactive tr.wlan-ap-row.connected td.wlan-ssid { color: #3fffa3; font-weight: 600; }
+.wlan-ssid { font-weight: 600; }
+.wlan-dot-conn {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: #3fffa3; box-shadow: 0 0 8px #3fffa3;
+}
+.wlan-bars { display: inline-flex; align-items: flex-end; gap: 2px; height: 16px; margin-right: .35rem; vertical-align: middle; }
+.wlan-bars i { display: inline-block; width: 3px; background: #2a3348; border-radius: 1px; }
+.wlan-bars i.on { background: #3fffa3; }
+button.wlan-pick {
+  background: rgba(80,120,210,.25); color: #cfe0ff; border: 1px solid rgba(120,160,230,.35);
+  border-radius: 6px; padding: .2rem .45rem; font-size: .75rem; cursor: pointer;
+}
+button.wlan-pick:hover { background: rgba(80,120,210,.45); }
+.wlan-sec-open { border-color: #ff6b6b !important; color: #ff6b6b !important; }
+.wlan-sec-wep { border-color: #ff6b6b !important; color: #ff6b6b !important; }
+.wlan-sec-wpa { border-color: #ffcf7a !important; color: #ffcf7a !important; }
+.wlan-sec-wpa2 { border-color: #9fe08a !important; color: #9fe08a !important; }
+.wlan-sec-wpa3 { border-color: #3fffa3 !important; color: #3fffa3 !important; }
+
+
+/* ===================== Startseite: Ameisen-Hintergrund + Beschreibung ===================== */
+/* Dezenter, selbst-enthaltener Kolonie-Hintergrund (reines SVG, kein CDN, kein Bild-Download).
+   Liegt hinter dem Inhalt (z-index -1), niedrige Deckkraft, stört die Lesbarkeit nicht. */
+/* Der frühere body.home::before (statisches colony-bg.svg) ist durch den
+   zufälligen Kolonie-Hintergrund in base.html abgelöst (site-weit, siehe oben). */
+
+.intro-card {
+  background: linear-gradient(180deg, rgba(26,29,36,.92), rgba(16,18,22,.92));
+  border: 1px solid #2a2f3a;
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+  padding: 1.1rem 1.35rem;
+  margin: 0 0 1.25rem;
+  backdrop-filter: blur(2px);
+}
+.intro-card h2 { display:flex; align-items:center; gap:.5rem; margin-bottom:.4rem; }
+.intro-card p { line-height:1.55; margin:.5rem 0; max-width:70ch; }
+.intro-modes { display:flex; flex-wrap:wrap; gap:.9rem; margin:.8rem 0 .4rem; }
+.intro-mode { flex:1 1 220px; background:#0f1115; border:1px solid #262a33;
+  border-radius:8px; padding:.6rem .8rem; font-size:.86rem; line-height:1.45; }
+.intro-mode.def { border-color:rgba(63,185,80,.45); }
+.intro-mode.off { border-color:rgba(248,81,73,.45); }
+.intro-mode strong { display:block; margin-bottom:.2rem; }
+.intro-guards { font-size:.82rem; color:var(--muted); line-height:1.5; margin:.5rem 0 0; }
+.intro-guards code { color:#79c0ff; }
+
+.didyouknow {
+  margin-top:1rem; background:#0b0d11; border:1px dashed rgba(210,153,34,.5);
+  border-radius:8px; padding:.7rem .9rem; font-size:.88rem; line-height:1.5;
+  display:flex; gap:.6rem; align-items:flex-start;
+}
+.didyouknow .dyk-ant { font-size:1.2rem; line-height:1; margin-top:.05rem; }
+.didyouknow b { color:var(--accent); }
+#dyk-fact { transition:opacity .4s ease; }
+
+/* ---- Papierkorb / Soft-Delete (Targets-Archiv) ---- */
+.trash-link { font-size: .6em; font-weight: 400; margin-left: .8em; opacity: .85; }
+.trash-link:hover { opacity: 1; }
+.btn-archive { background: transparent; border: 1px solid #c0392b55; color: #e08a7f;
+  font-size: .85em; padding: 2px 8px; margin-left: 6px; border-radius: 6px; cursor: pointer; }
+.btn-archive:hover { background: #c0392b22; color: #ff9f93; }
+.btn-restore { background: transparent; border: 1px solid #27ae6055; color: #7fd6a0;
+  font-size: .85em; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+.btn-restore:hover { background: #27ae6022; color: #9affc0; }
+
+/* ---- WLAN Scope / Queen / Airgorah (aufgeräumt) ---- */
+.wlan-queen-box {
+  border: 1px solid rgba(80,120,210,.45);
+  background: rgba(40,60,110,.22);
+  border-radius: 12px;
+  padding: .7rem .9rem;
+  margin: .6rem 0 1rem;
+}
+.wlan-queen-head { display:flex; flex-wrap:wrap; gap:.5rem; align-items:baseline; margin-bottom:.45rem; }
+.wlan-queen-checks { display:flex; flex-wrap:wrap; gap:.55rem .9rem; margin:.35rem 0 .55rem; }
+.wlan-check-item { display:inline-flex; align-items:center; gap:.35rem; font-size:.9rem; color:#c7d2ec; }
+.wlan-queen-actions { display:flex; flex-wrap:wrap; gap:.45rem; align-items:center; }
+button.wlan-queen-btn { background: linear-gradient(135deg,#3a5fd0,#6a3fd0); border:none; color:#fff; font-weight:700; }
+.wlan-scope-create input { min-width: 8rem; }
+.wlan-eng-row {
+  display:flex; justify-content:space-between; gap:.6rem; flex-wrap:wrap;
+  border-top:1px solid #2a2f3a; padding:.45rem 0; align-items:flex-start;
+}
+.wlan-eng-actions { display:flex; gap:.35rem; flex-wrap:wrap; }
+.wlan-tool-grid { display:flex; flex-wrap:wrap; gap:.35rem; margin:.4rem 0; }
+.wlan-air-actions { display:flex; flex-wrap:wrap; gap:.45rem; margin-top:.45rem; }
+.wlan-air-actions button { min-width: 11rem; }
+.wlan-tabs .wtab[data-tab="scope"].active {
+  background: rgba(60,140,100,.35); border-color: rgba(63,255,163,.45);
+}

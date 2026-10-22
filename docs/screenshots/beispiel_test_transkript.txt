@@ -1,0 +1,270 @@
+======================================================================
+ antbb — Beispiel: lokaler, defensiver Test gegen den mitgelieferten
+ Verwundbar-Testserver (tools_vuln_testserver.py)  —  NUR 127.0.0.1
+======================================================================
+
+# 0) Lokalen Verwundbar-Testserver im Hintergrund starten (Port 8911)
+$ python tools_vuln_testserver.py 8911 vuln &
+serving 127.0.0.1:8911 mode=vuln
+
+# 1) Target anlegen
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner target add demo-local -d Lokaler Testbed 127.0.0.1
+----------------------------------------------------------------------
+⚠️  NEUES ZIEL: demo-local
+Pentest und Bug-Bounty OHNE schriftliche oder öffentliche
+Ausschreibung/Autorisierung sind STRAFBAR (§ 202a-c StGB in DE,
+Computer Fraud and Abuse Act in US).
+Scope-Freigabe vorhanden? [j/N]
+
+✅ Target angelegt: id=1 name=demo-local
+Hinweis: Scope-Einträge hinzufügen und Oversight-Häkchen setzen, bevor ein Scan möglich ist.
+
+# 2) Scope/Allowlist setzen (nur der lokale Testserver)
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner scope add demo-local url http://127.0.0.1:8911
+----------------------------------------------------------------------
+✅ Scope-Eintrag 1 (in-scope): url=http://127.0.0.1:8911 für demo-local
+
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner scope add demo-local ip 127.0.0.1
+----------------------------------------------------------------------
+✅ Scope-Eintrag 2 (in-scope): ip=127.0.0.1 für demo-local
+
+# 2b) Scope-Pruefung: ist das Ziel in-scope?
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner scope check demo-local http://127.0.0.1:8911/
+----------------------------------------------------------------------
+✅ ERLAUBT: http://127.0.0.1:8911/
+  → Asset ist in-scope (ip:127.0.0.1).
+
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner scope list demo-local
+----------------------------------------------------------------------
+[1] in-scope  url=http://127.0.0.1:8911
+[2] in-scope  ip=127.0.0.1
+
+# 3) Human-Oversight-Haekchen setzen (Pflicht vor jedem Scan)
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner oversight set demo-local on --by analyst --note lokaler Demo-Test
+----------------------------------------------------------------------
+Bestätigung: "Ich bestätige, dass das Target autorisiert/erlaubt ist und ich zum Testen berechtigt bin."
+Oversight-Häkchen für 'demo-local' GESETZT ✔
+
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner oversight status demo-local
+----------------------------------------------------------------------
+✔ bestätigt von 'analyst' am 2026-10-22 22:02  Notiz: lokaler Demo-Test
+
+
+# 4) DEFENSIVER Scan (lesend: Header/Ports/exponierte Pfade) — kein --active/--fuzz
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner scan demo-local --phases recon,scan,analyze,report
+----------------------------------------------------------------------
+⚠️  NEUES ZIEL: demo-local
+Pentest und Bug-Bounty OHNE schriftliche oder öffentliche
+Ausschreibung/Autorisierung sind STRAFBAR (§ 202a-c StGB in DE,
+Computer Fraud and Abuse Act in US).
+Scope-Freigabe vorhanden? [j/N]
+
+   👑 Königin startet Schwarm (run 191ea98b7fee) für 'demo-local' mit 2 In-Scope-Assets.
+   👑 LLM-Unterstützung aktiv (Provider 'minimax', Hauptmodell 'MiniMax-M3', Flash-Modell 'MiniMax-M3.1-Flash'; Modellwahl dynamisch pro Aufgabentyp).
+   👑 Aktive Verifikation AUS (Default) – rein passives Verhalten; Verify-Phase wird übersprungen.
+   👑 mode_policy=auto · active=False · fuzz=False
+   👑 Offensives Fuzzing AUS (Default) – Fuzz-Ameise bleibt still.
+   👑 Phase 'recon': dispatche 4 Ameisen parallel.
+   [recon] 🐜 startet Phase 'recon' für demo-local
+   [mobile] 🐜 startet Phase 'recon' für demo-local
+   [mobile] ℹ️ Kein App-Artefakt (APK/IPA/Repo) übergeben – Mobile-Analyse übersprungen (ehrlicher Leerzustand).
+   [mobile] ✅ fertig (1 Findings, 0.00s)
+   [wifi] 🐜 startet Phase 'recon' für demo-local
+   [wifi] WLAN-Audit nicht freigeschaltet (ANTBB_WIFI!=1) – ehrlich leer.
+   [wifi] ✅ fertig (0 Findings, 0.00s)
+   [takeover] 🐜 startet Phase 'recon' für demo-local
+   [takeover] ✅ fertig (0 Findings, 0.01s)
+   [kali] ℹ️ nmap nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [recon] ✅ fertig (0 Findings, 3.51s)
+   👑 Phase 'recon' abgeschlossen: +1 neue Findings (gesamt 1).
+   👑 Phase 'scan': dispatche 8 Ameisen parallel.
+   [scanning] 🐜 startet Phase 'scan' für demo-local
+   [api] 🐜 startet Phase 'scan' für demo-local
+   [infra] 🐜 startet Phase 'scan' für demo-local
+   [osint] 🐜 startet Phase 'scan' für demo-local
+   [cloud] 🐜 startet Phase 'scan' für demo-local
+   [auth] 🐜 startet Phase 'scan' für demo-local
+   [llmsec] 🐜 startet Phase 'scan' für demo-local
+   [fuzz] 🐜 startet Phase 'scan' für demo-local
+   [fuzz] ⏸️ Offensives Fuzzing NICHT aktiviert (Schalter scan.fuzz.enabled=false / kein --fuzz) – keine Findings.
+   [fuzz] ✅ fertig (0 Findings, 0.00s)
+   [kali] ℹ️ sslscan nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [infra] ✅ fertig (0 Findings, 1.53s)
+   [api] http://127.0.0.1:8911/openapi.json erreichbar (200, text/html)
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [api] http://127.0.0.1:8911/swagger.json erreichbar (200, text/html)
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [cloud] ✅ fertig (0 Findings, 8.52s)
+   [scanning] ⚠️ Catch-all erkannt @ http://127.0.0.1:8911: 3 Zufallspfade status∈[200] len≈98 (3/3 erfolgreich/redirect, median-ähnlichkeit 1.00) → nur signifikant abweichende Treffer gelten als Fund.
+   [scanning] http://127.0.0.1:8911/ → HTTP 200, Server 'BaseHTTP/0.6 Python/3.13.5'
+   [scanning] http://127.0.0.1:8911: fehlende Header ['content-security-policy', 'strict-transport-security', 'x-content-type-options', 'x-frame-options', 'referrer-policy']
+   [api] http://127.0.0.1:8911/swagger-ui.html erreichbar (200, text/html)
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [scanning] · / @ http://127.0.0.1:8911 als Catch-all-Artefakt verworfen (sim 1.00).
+   [api] http://127.0.0.1:8911/api erreichbar (200, application/json)
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [osint] ✅ fertig (0 Findings, 13.53s)
+   [scanning] · /robots.txt @ http://127.0.0.1:8911 als Catch-all-Artefakt verworfen (sim 1.00).
+   [api] http://127.0.0.1:8911/api/v1 erreichbar (200, application/json)
+   [scanning] · /.git/ @ http://127.0.0.1:8911 als Catch-all-Artefakt verworfen (sim 1.00).
+   [api] http://127.0.0.1:8911/graphql erreichbar (200, text/html)
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [api] http://127.0.0.1:8911/.well-known/openapi.json erreichbar (200, text/html)
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [auth] ✅ fertig (1 Findings, 20.05s)
+   [scanning] http://127.0.0.1:8911/backup/: Directory-Listing offen
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [llmsec] ℹ️ Aktive Prompt-Injection-Prüfung AUS (benötigt Oversight + --active + API-Kontrakt).
+   [scanning] http://127.0.0.1:8911/.env: sensibler Pfad erreichbar (200)
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [api] ✅ fertig (7 Findings, 23.06s)
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [scanning] · /server-status @ http://127.0.0.1:8911 als Catch-all-Artefakt verworfen (sim 1.00).
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [llmsec] ✅ fertig (8 Findings, 24.56s)
+   [scanning] http://127.0.0.1:8911: Parameter wird reflektiert (XSS-Indikator)
+   [scanning] http://127.0.0.1:8911: DB-Fehlermeldung bei '-Payload (SQLi-Indikator)
+   [net] ⚠️ Request fehlgeschlagen (GET https://127.0.0.1/): All connection attempts failed
+   [net] ⚠️ Request fehlgeschlagen (GET http://127.0.0.1/): All connection attempts failed
+   [kali] ℹ️ whatweb nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ wafw00f nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nikto nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ whatweb nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ wafw00f nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nikto nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ whatweb nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ wafw00f nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nuclei nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [kali] ℹ️ nikto nicht verfügbar – übersprungen (kein Fake-Ergebnis).
+   [scanning] ✅ fertig (10 Findings, 26.57s)
+   👑 Phase 'scan' abgeschlossen: +26 neue Findings (gesamt 27).
+   👑 Phase 'analyze': dispatche 4 Ameisen parallel.
+   [analysis] 🐜 startet Phase 'analyze' für demo-local
+   [threatintel] 🐜 startet Phase 'analyze' für demo-local
+   [threatintel] NVD-Lookup nicht freigeschaltet (ANTBB_NVD!=1) – übersprungen.
+   [kali] ℹ️ searchsploit nicht verfügbar – übersprungen.
+   [kali] ℹ️ searchsploit nicht verfügbar – übersprungen.
+   [threatintel] Keine Technologie/Version → keine CVE-Korrelation (ehrlich leer).
+   [threatintel] ✅ fertig (0 Findings, 0.00s)
+   [poc] 🐜 startet Phase 'analyze' für demo-local
+   [codeaudit] 🐜 startet Phase 'analyze' für demo-local
+   [codeaudit] Kein code_path übergeben – übersprungen (honest-empty, read-only Quell-Audit erfordert expliziten Pfad).
+   [codeaudit] ✅ fertig (0 Findings, 0.00s)
+   [analysis] CVSS-Vorschläge für 27 Findings erstellt.
+   [analysis] 🔗 Korrelation: SQLi-Indikator – DB-Kompromittierung prüfen
+   [analysis] 🔗 Korrelation: Reflektierte Eingabe ohne CSP → XSS/Session-Diebstahl plausibel
+   [analysis] 🔗 Korrelation: Info-Disclosure + fehlende Header → erhöhtes Aufklärungsrisiko
+   [analysis] Priorisierung: Top 'Sensibler Pfad erreichbar: /.env' (high)
+   [analysis] 🧭 Router → minimax/MiniMax-M3 (Automatisch gewählt (tier=strong, Komplexität=0.80).)
+   [poc] ✅ fertig (0 Findings, 0.01s)
+   [analysis] 🧠 LLM-Priorisierung erstellt (minimax/MiniMax-M3).
+   [analysis] ✅ fertig (5 Findings, 5.88s)
+   👑 Phase 'analyze' abgeschlossen: +5 neue Findings (gesamt 32).
+   👑 Phase 'report': dispatche 1 Ameisen parallel.
+   [reporting] 🐜 startet Phase 'report' für demo-local
+   [reporting] Zusammenfassung: 27 gezählte Findings (+0 als False-Positive ausgeschlossen), Verteilung {'critical': 0, 'high': 1, 'medium': 6, 'low': 7, 'info': 13}, Status {'BESTÄTIGT(PASSIV)': 25, 'ZU BESTÄTIGEN': 2}
+   [reporting] 🧭 Router → minimax/MiniMax-M3 (Automatisch gewählt (tier=strong, Komplexität=0.80).)
+   [reporting] 🧠 LLM-Report-Entwurf erstellt (minimax/MiniMax-M3).
+   [reporting] ✅ fertig (3 Findings, 20.98s)
+   👑 Phase 'report' abgeschlossen: +3 neue Findings (gesamt 35).
+   👑 Netzwerk-Operationen gesamt (nur in-scope): 62.
+   👑 Proof-Gate OK: kein VERIFIZIERT ohne aktive Evidence.
+   👑 Schwarm fertig in 56.97s. Verteilung: {'critical': 0, 'high': 1, 'medium': 6, 'low': 7, 'info': 13} · Status: {'BESTÄTIGT(PASSIV)': 25, 'ZU BESTÄTIGEN': 2}
+
+👑 Schwarm-Lauf 191ea98b7fee fertig in 56.97s
+   Findings: 35  Verteilung: {'critical': 0, 'high': 1, 'medium': 6, 'low': 7, 'info': 13}
+   - [high    ] Sensibler Pfad erreichbar: /.env  (http://127.0.0.1:8911/.env)  <scanning>
+   - [high    ] CVSS-Vorschläge & Priorisierung  (demo-local)  <analysis>
+   - [high    ] SQLi-Indikator – DB-Kompromittierung prüfen  (http://127.0.0.1:8911)  <analysis>
+   - [high    ] Reflektierte Eingabe ohne CSP → XSS/Session-Diebstahl plausibel  (http://127.0.0.1:8911)  <analysis>
+   - [high    ] Report-Entwurf erstellt  (demo-local)  <reporting>
+   - [medium  ] Fehlender Security-Header: content-security-policy  (http://127.0.0.1:8911)  <scanning>
+   - [medium  ] Fehlender Security-Header: strict-transport-security  (http://127.0.0.1:8911)  <scanning>
+   - [medium  ] Directory-Listing offen: /backup/  (http://127.0.0.1:8911/backup/)  <scanning>
+   - [medium  ] SQL-Fehlermeldung (SQLi-Indikator)  (http://127.0.0.1:8911)  <scanning>
+   - [medium  ] Exponierte API-Oberfläche: OpenAPI-Spezifikation  (http://127.0.0.1:8911/openapi.json)  <api>
+   - [medium  ] Exponierte API-Oberfläche: Swagger-Spezifikation  (http://127.0.0.1:8911/swagger.json)  <api>
+   - [medium  ] Info-Disclosure + fehlende Header → erhöhtes Aufklärungsrisiko  (demo-local, http://127.0.0.1:8911, http://127.0.0.1:8911/.env, http://127.0.0.1:8911/backup/, http://127.0.0.1:8911/login)  <analysis>
+   - [low     ] Fehlender Security-Header: x-content-type-options  (http://127.0.0.1:8911)  <scanning>
+   - [low     ] Fehlender Security-Header: x-frame-options  (http://127.0.0.1:8911)  <scanning>
+   - [low     ] Fehlender Security-Header: referrer-policy  (http://127.0.0.1:8911)  <scanning>
+   - [low     ] Reflektierter Parameter (XSS-Indikator)  (http://127.0.0.1:8911)  <scanning>
+   - [low     ] Exponierte API-Oberfläche: Swagger-UI  (http://127.0.0.1:8911/swagger-ui.html)  <api>
+   - [low     ] Exponierte API-Oberfläche: GraphQL-Endpunkt  (http://127.0.0.1:8911/graphql)  <api>
+   - [low     ] Exponierte API-Oberfläche: OpenAPI (well-known)  (http://127.0.0.1:8911/.well-known/openapi.json)  <api>
+   - [info    ] Mobile-Analyse: kein App-Artefakt vorhanden  (demo-local)  <mobile>
+
+# 5) Findings anzeigen
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner findings demo-local
+----------------------------------------------------------------------
+[35] [info    ] LLM-Report-Entwurf  (demo-local)  <reporting>
+[34] [info    ] Proof-Gate: bestanden  (demo-local)  <reporting>
+[33] [high    ] Report-Entwurf erstellt  (demo-local)  <reporting>
+[32] [info    ] LLM-Analyse: Zusammenfassung & Priorisierung  ()  <analysis>
+[31] [medium  ] Info-Disclosure + fehlende Header → erhöhtes Aufklärungsrisiko  (demo-local, http://127.0.0.1:8911, http://127.0.0.1:8911/.env, http://127.0.0.1:8911/backup/, http://127.0.0.1:8911/login)  <analysis>
+[30] [high    ] Reflektierte Eingabe ohne CSP → XSS/Session-Diebstahl plausibel  (http://127.0.0.1:8911)  <analysis>
+[29] [high    ] SQLi-Indikator – DB-Kompromittierung prüfen  (http://127.0.0.1:8911)  <analysis>
+[28] [high    ] CVSS-Vorschläge & Priorisierung  (demo-local)  <analysis>
+[27] [info    ] LLM-/KI-Endpunkt erkannt: /v1/models  (http://127.0.0.1:8911/v1/models)  <llmsec>
+[26] [info    ] LLM-/KI-Endpunkt erkannt: /completions  (http://127.0.0.1:8911/completions)  <llmsec>
+[25] [info    ] LLM-/KI-Endpunkt erkannt: /chat  (http://127.0.0.1:8911/chat)  <llmsec>
+[24] [info    ] LLM-/KI-Endpunkt erkannt: /api/ai  (http://127.0.0.1:8911/api/ai)  <llmsec>
+[23] [info    ] LLM-/KI-Endpunkt erkannt: /api/generate  (http://127.0.0.1:8911/api/generate)  <llmsec>
+[22] [info    ] LLM-/KI-Endpunkt erkannt: /api/chat  (http://127.0.0.1:8911/api/chat)  <llmsec>
+[21] [info    ] LLM-/KI-Endpunkt erkannt: /v1/completions  (http://127.0.0.1:8911/v1/completions)  <llmsec>
+[20] [info    ] LLM-/KI-Endpunkt erkannt: /v1/chat/completions  (http://127.0.0.1:8911/v1/chat/completions)  <llmsec>
+[19] [info    ] Auth-Oberfläche erreichbar: /login  (http://127.0.0.1:8911/login)  <auth>
+[18] [low     ] Exponierte API-Oberfläche: OpenAPI (well-known)  (http://127.0.0.1:8911/.well-known/openapi.json)  <api>
+[17] [low     ] Exponierte API-Oberfläche: GraphQL-Endpunkt  (http://127.0.0.1:8911/graphql)  <api>
+[16] [info    ] Exponierte API-Oberfläche: API v1  (http://127.0.0.1:8911/api/v1)  <api>
+[15] [info    ] Exponierte API-Oberfläche: API-Wurzel  (http://127.0.0.1:8911/api)  <api>
+[14] [low     ] Exponierte API-Oberfläche: Swagger-UI  (http://127.0.0.1:8911/swagger-ui.html)  <api>
+[13] [medium  ] Exponierte API-Oberfläche: Swagger-Spezifikation  (http://127.0.0.1:8911/swagger.json)  <api>
+[12] [medium  ] Exponierte API-Oberfläche: OpenAPI-Spezifikation  (http://127.0.0.1:8911/openapi.json)  <api>
+[11] [medium  ] SQL-Fehlermeldung (SQLi-Indikator)  (http://127.0.0.1:8911)  <scanning>
+[10] [low     ] Reflektierter Parameter (XSS-Indikator)  (http://127.0.0.1:8911)  <scanning>
+[9] [high    ] Sensibler Pfad erreichbar: /.env  (http://127.0.0.1:8911/.env)  <scanning>
+[8] [medium  ] Directory-Listing offen: /backup/  (http://127.0.0.1:8911/backup/)  <scanning>
+[7] [low     ] Fehlender Security-Header: referrer-policy  (http://127.0.0.1:8911)  <scanning>
+[6] [low     ] Fehlender Security-Header: x-frame-options  (http://127.0.0.1:8911)  <scanning>
+[5] [low     ] Fehlender Security-Header: x-content-type-options  (http://127.0.0.1:8911)  <scanning>
+[4] [medium  ] Fehlender Security-Header: strict-transport-security  (http://127.0.0.1:8911)  <scanning>
+[3] [medium  ] Fehlender Security-Header: content-security-policy  (http://127.0.0.1:8911)  <scanning>
+[2] [info    ] HTTP-Fingerprint: http://127.0.0.1:8911  (http://127.0.0.1:8911)  <scanning>
+[1] [info    ] Mobile-Analyse: kein App-Artefakt vorhanden  (demo-local)  <mobile>
+
+
+# 6) Kurzen Report generieren (zusammenfassend)
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner report create demo-local Lokaler Defensiv-Test – Testbed 127.0.0.1
+----------------------------------------------------------------------
+✅ Report erstellt: id=1  'Lokaler Defensiv-Test – Testbed 127.0.0.1'  (CVSS None, Schwere )
+
+# 7) Reports auflisten
+
+$ python -m antbb --db /tmp/antbb_demo.db --no-banner report list demo-local
+----------------------------------------------------------------------
+[1] Lokaler Defensiv-Test – Testbed 127.0.0.1  CVSS=None  Schwere=  (2026-10-22 22:04)
+
+
+# 8) Aufräumen: lokalen Testserver beenden
+$ kill <pid des tools_vuln_testserver.py>
+
+======================================================================
+ ERGEBNIS: 35 Findings (0 critical, 1 high, 6 medium, 7 low, 13 info)
+ Rein lokal (127.0.0.1:8911), defensiv/lesend. Proof-Gate bestanden.
+======================================================================

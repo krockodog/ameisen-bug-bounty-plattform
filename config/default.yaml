@@ -1,0 +1,194 @@
+# antbb – Standard-Konfiguration (wird beim Start von CLI und Webserver geladen).
+#
+# ╔════════════════════════════════════════════════════════════════════════╗
+# ║ ZENTRALE REGEL: Kein einzelnes LLM aktiviert von sich aus einen Schwarm. ║
+# ║ Das Schwarm-Verhalten (Königin + Spezial-Agenten, Phasen, Dispatch)      ║
+# ║ kommt AUSSCHLIESSLICH aus dem antbb-Framework. Die hier konfigurierten   ║
+# ║ LLMs sind nur austauschbare Denk-/Text-Bausteine, die der Router pro     ║
+# ║ Aufgabe aufruft.                                                         ║
+# ╚════════════════════════════════════════════════════════════════════════╝
+#
+# Diese Datei enthält NIEMALS API-Keys oder Tokens. Keys kommen ausschließlich
+# aus Umgebungsvariablen (siehe providers.*.key_env); OAuth-Tokens liegen
+# verschlüsselt in data/oauth_tokens.enc (Fernet-Key in data/oauth.key).
+llm:
+  # Standard-Provider, wenn der Router keinen passenderen findet.
+  default_provider: minimax
+  # Basis-Defaults (bleiben als Fallback erhalten): Königin=Hauptmodell,
+  # schnelle Agenten-Schritte=Flash-Modell.
+  main_model: MiniMax-M3
+  fast_model: MiniMax-M3.1-Flash
+
+  providers:
+    minimax:
+      base_url: https://api.minimax.io/v1
+      # auth_mode: key = Env-Var-Key; oauth = OAuth-Flow; none = keine Auth.
+      auth_mode: key
+      # Recherche: MiniMax dokumentiert KEINEN OAuth-2.0-Flow für API-Zugang
+      # (Bearer-API-Key). oauth_available=false → Key-Modus (Fallback).
+      oauth_available: false
+      key_env: MINIMAX_API_KEY
+      default_model: MiniMax-M3
+      fast_model: MiniMax-M3.1-Flash
+
+    openai:
+      base_url: https://api.openai.com/v1
+      # Recherche: OpenAI bietet "Sign in with ChatGPT" (OAuth 2.0 Auth-Code +
+      # PKCE) für berechtigte Dritt-/Open-Source-Apps, um den ChatGPT-Plan über
+      # die Responses-API zu nutzen. Standard-API-Zugang bleibt Bearer-API-Key.
+      # auth_mode=key = aktiver Fallback; OAuth ist verfügbar (oauth_available),
+      # aber bis zur Anmeldung gilt der Key-Modus.
+      auth_mode: key
+      oauth_available: true
+      key_env: OPENAI_API_KEY
+      default_model: gpt-4o-mini
+      fast_model: gpt-4o-mini
+      oauth:
+        authorize_url: https://auth.openai.com/api/accounts/authorize
+        token_url: https://auth.openai.com/api/accounts/oauth/token
+        # Loopback-Redirect auf die lokale antbb-Weboberfläche.
+        redirect_path: /auth/openai/callback
+        scopes: "openid profile email offline_access"
+        # Hinweis: Der vollständige "Sign in with ChatGPT"-Flow nutzt dynamische
+        # Client-Registrierung (client_id=dynamic_agent_client). Es werden hier
+        # KEINE Client-IDs/Secrets erfunden – sie entstehen zur Laufzeit im Flow.
+
+    kimi:
+      base_url: https://api.moonshot.ai/v1
+      # Recherche: Moonshot/Kimi Open Platform nutzt API-KEYS (kein Auth-Code-
+      # OAuth für API-Zugang). Nur das separate Produkt "Kimi Code" hat einen
+      # Device-Code-OAuth-Login (managed service), NICHT die Open-Platform-API.
+      # Daher: Login-/Plan-Modus-Platzhalter, "bereit zur Anmeldung". Es wird
+      # KEINE KIMI_API_KEY-Env-Var angelegt, solange der Nutzer keinen Key nennt.
+      auth_mode: login
+      oauth_available: false
+      key_env: null
+      default_model: kimi-k2-0905-preview
+      fast_model: kimi-k2-0905-preview
+
+    ollama:
+      # Lokaler Provider, keine Authentifizierung. Natives /api/chat (stabilster
+      # Pfad über alle Ollama-Versionen).
+      base_url: http://localhost:11434
+      auth_mode: none
+      oauth_available: false
+      key_env: null
+      default_model: llama3.1
+      fast_model: llama3.2
+
+  # Router-Schwellen (nachvollziehbare Regeln, siehe antbb/router.py).
+  router:
+    # Aufgabentypen, die als "kritisch" gelten → können Nutzer-Rückfrage auslösen.
+    critical_task_types: [strategy, attack_plan, prioritization, exploit_decision]
+    # Komplexitäts-Schwelle (0..1), ab der ein starkes Modell gewählt wird.
+    complexity_threshold: 0.5
+
+# ── Scan-Parameter für die ECHTEN, defensiven Module (Recon/Scan/Infra/API) ──
+# Rein defensiv/nicht-destruktiv. Rate-Limiting schützt die Ziele vor Last.
+scan:
+  max_rps_per_host: 2        # max. Requests pro Sekunde pro Host
+  request_delay: 0.3         # zusätzliche Mindestpause (s) zwischen Requests/Host
+  http_timeout: 8.0          # HTTP-Timeout (s)
+  user_agent: "antbb/1.0 (local authorized scan)"
+  verify_tls: false          # Scanner akzeptiert auch ungültige Zertifikate (nur lesend)
+  recon:
+    enable_portscan: true
+    ports: [80, 443, 8080, 8443, 22, 21, 25, 3306]
+    port_timeout: 1.0        # kurzer TCP-Connect-Timeout (s)
+    dns_timeout: 3.0
+    subdomain_wordlist: [www, api, dev, staging, admin, mail, test, cdn, blog, app]
+  scanner:
+    paths: ["/", "/robots.txt", "/.git/", "/admin/", "/backup/", "/.env", "/server-status"]
+    reflect_param: "antbbtest"
+
+  # ── TIEFE, KONTROLLIERTE AKTIVE VERIFIKATION ────────────────────────────────
+  # Verifiziert Befunde aktiv (statt sie nur zu vermuten). SICHERHEITS-SCHALTER:
+  # enabled=false als Default. Die aktiven Checks laufen NUR, wenn dieser Schalter
+  # true ist ODER der Lauf ausdrücklich mit --active (CLI) bzw. der Web-Checkbox
+  # "Aktive Verifikation (autorisiert)" gestartet wird. Zusätzlich gelten weiterhin
+  # Scope-Gate (default-deny) und Oversight-Häkchen. KEINE destruktiven Payloads,
+  # kein Brute-Force, keine Last-Erzeugung; nur wenige Payloads je Parameter.
+  active_verification:
+    enabled: false              # DEFAULT AUS – muss ausdrücklich freigeschaltet werden
+    max_payloads_per_param: 4   # harte Obergrenze an Payloads/Parametern je Check
+    time_based_threshold: 4.0   # Delay-Schwelle (s) für time-based SQLi (konservativ)
+    time_based_delay: 3         # angefordertes SLEEP (s)
+    time_based_attempts: 2      # wenige Versuche
+    checks: [xss, sqli, open_redirect, path_traversal, exposed_artifact, cors, missing_auth, ssrf]
+    param_candidates: [q, s, search, query, name, id, page, lang, ref]
+    ssrf_max_params: 12
+    ssrf_param_candidates: [url, uri, u, link, src, source, dest, destination, redirect, redirect_uri, next, target, callback, webhook, image, img, imageurl, image_url, fetch, load, feed, proxy, data, domain, host, site]
+    redirect_param_candidates: [next, url, redirect, redirect_uri, return, returnUrl, dest, destination, r, u, to]
+    file_param_candidates: [file, path, page, template, doc, include, view]
+
+  # ── KONTROLLIERTES OFFENSIVES FUZZING ───────────────────────────────────────
+  # Content-/Path-Discovery und Parameter-Fuzzing (nur GET, gutartige Marker).
+  # SICHERHEITS-SCHALTER: enabled=false als Default. Läuft NUR, wenn dieser
+  # Schalter true ist ODER der Lauf mit --fuzz (CLI) bzw. der Web-Checkbox
+  # "Offensives Fuzzing (autorisiert)" gestartet wird (Env: ANTBB_FUZZ=1).
+  # Unabhängig von active_verification. Zusätzlich gelten Scope-Gate
+  # (default-deny) und Oversight-Häkchen. KEINE destruktiven Methoden,
+  # kein Brute-Force, keine Last-Erzeugung. Catch-all/WAF-Schutz über Baseline
+  # (Zufallspfade): nur von der Baseline abweichende Treffer werden gemeldet.
+  fuzz:
+    enabled: false                 # DEFAULT AUS – muss ausdrücklich freigeschaltet werden
+    max_requests: 200              # harte Obergrenze an Fuzz-Requests je Basis-URL
+    baseline_samples: 3            # Anzahl Zufalls-Baseline-Pfade
+    length_tolerance: 64           # Content-Length-Toleranz (Bytes) ggü. Baseline
+    wordlist:
+      - /admin
+      - /admin/
+      - /login
+      - /login/
+      - /wp-admin/
+      - /wp-login.php
+      - /dashboard
+      - /manage
+      - /console
+      - /phpmyadmin/
+      - /pma/
+      - /api
+      - /api/v1
+      - /api/v2
+      - /graphql
+      - /swagger.json
+      - /openapi.json
+      - /.git/HEAD
+      - /.git/config
+      - /.env
+      - /.env.local
+      - /.DS_Store
+      - /backup
+      - /backup/
+      - /backups/
+      - /dump.sql
+      - /db.sql
+      - /config.php.bak
+      - /server-status
+      - /server-info
+      - /actuator
+      - /actuator/health
+      - /robots.txt
+      - /sitemap.xml
+      - /.well-known/security.txt
+      - /debug
+      - /trace
+      - /test
+      - /tmp
+      - /old
+      - /bak
+      - /config
+      - /config.json
+      - /package.json
+      - /composer.json
+      - /uploads/
+      - /files/
+      - /static/
+      - /assets/
+      - /user
+      - /users
+      - /account
+      - /settings
+      - /panel
+    param_candidates: [q, s, search, query, id, page, file, path, lang, ref]
+    param_markers: ["antbbFUZZ1", "../antbb", "antbb'\"<>"]
