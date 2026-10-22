@@ -1,5 +1,17 @@
 # 🐜 antbb – Ameisen-Schwarm Bug-Bounty / Pentest Framework (lokal)
 
+![Python](https://img.shields.io/badge/Python-3.11--3.13-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-Web%20%2B%20JSON--API-009688?logo=fastapi&logoColor=white)
+![Status](https://img.shields.io/badge/Status-v1.0.0-success)
+![Nur autorisiert](https://img.shields.io/badge/Einsatz-nur%20autorisiert%20(%C2%A7%20202a--c%20StGB)-critical)
+![Local first](https://img.shields.io/badge/Betrieb-lokal%20(127.0.0.1)-informational)
+
+> **Eine Königin, ein Schwarm aus 18 spezialisierten Ameisen-Soldaten.** antbb ist
+> eine lokale, KI-gestützte Pentest-/Bug-Bounty-Plattform: Die Königin orchestriert
+> den Schwarm über klare Phasen (Recon → Scan → Analyse → Report), hart abgesichert
+> durch **default-deny Scope** und ein **Human-Oversight-Gate**. Läuft standardmäßig
+> rein lokal unter `http://127.0.0.1` – nichts wird ohne deine Freigabe nach außen
+> getragen.
 
 ## Funktionsumfang (vollständige Plattform)
 
@@ -62,28 +74,40 @@ Es tritt **keiner** externen Plattform (HackerOne, Bugcrowd, …) bei und führt
 ## Verzeichnisstruktur
 
 ```
-ameisen-bugbounty/
-├── antbb/
-│   ├── __init__.py  __main__.py
-│   ├── service.py        # gemeinsame Fassade (CLI + Web)
-│   ├── store.py          # SQLite-Persistenz
-│   ├── scope.py          # Allowlist-Prüfung
-│   ├── oversight.py      # Pflicht-Häkchen-Gate
-│   ├── queen.py          # Ameisenkönigin / Orchestrator
-│   ├── reports.py        # Evidence-Kette, CVSS, Export
-│   ├── disclaimer.py     # Pflichthinweis
-│   ├── cli.py            # CLI (argparse)
-│   ├── agents/           # Basisklasse + 8 Spezial-Agenten
-│   │   ├── base.py recon.py scanning.py api.py infra.py
-│   │   └── fuzz.py analysis.py poc.py reporting.py
+ameisen-bug-bounty-plattform/
+├── antbb/                     # Produktivcode (Package)
+│   ├── __init__.py  __main__.py  cli.py
+│   ├── service.py             # gemeinsame Fassade (CLI + Web)
+│   ├── store.py               # SQLite-Persistenz
+│   ├── scope.py               # Allowlist-Prüfung (default-deny)
+│   ├── oversight.py           # Pflicht-Häkchen-Gate
+│   ├── active_oversight.py    # Freigabe-Gate für aktive/offensive Aktionen
+│   ├── queen.py               # Ameisenkönigin / Orchestrator
+│   ├── router.py  llm.py  oauth.py  prompts.py   # Multi-Provider-LLM + Auth
+│   ├── reports.py  findingreport.py  brandedreport.py  rating.py
+│   ├── attackpath.py  poc_builder.py  replay.py  proofgate.py
+│   ├── brain_ops.py  registry.py  sdk.py  plugins/   # Neural-Brain + Erweiterbarkeit
+│   ├── remote_access.py  egress_firewall.py  netutil.py
+│   ├── wlan_survey.py  wlan_offensive.py  wlan_airgorah.py  wordlists.py
+│   ├── codeaudit.py  config.py  telemetry.py  disclaimer.py
+│   ├── agents/                # Basisklasse + 20 Spezial-Soldaten
+│   │   ├── base.py recon.py scanning.py api.py infra.py fuzz.py
+│   │   ├── analysis.py poc.py reporting.py auth.py osint.py cloud.py
+│   │   ├── mobile.py codeaudit.py llmsec.py threatintel.py verify.py
+│   │   ├── ssrf.py takeover.py wifi.py  skills/
+│   │   └── …
+│   ├── tools/                 # Kali-Tool-Adapter-Schicht
 │   └── web/
-│       ├── app.py        # FastAPI: HTML + JSON-API
-│       ├── templates/    # base.html index.html target.html
-│       └── static/style.css
-├── run_web.py            # Webserver-Starter
-├── requirements.txt
-├── README.md
-└── data/                 # SQLite-DB + Exporte (gitignored)
+│       ├── app.py             # FastAPI: HTML + JSON-API
+│       ├── templates/         # base/index/target/brain/wlan/trash.html
+│       └── static/            # Style, Neural-Brain-Assets
+├── tests/                     # nur Smoke-/Selbsttests (NICHT Produktivcode)
+├── docs/screenshots/          # Galerie (nur Repo, nicht in der ZIP)
+├── config/                    # default.yaml (Provider-URLs, Router-Schwellen)
+├── install-and-start.sh       # robuster 1-Befehl-Installer (= install.sh)
+├── run.sh  run_web.py  requirements.txt
+├── MANIFEST.md  INSTALL.md  antbb.env.example
+└── data/                      # SQLite-DB + Exporte (gitignored)
 ```
 
 ## Installation
@@ -349,6 +373,26 @@ Nichts davon ist getarnt; die Logik steht offen in `antbb/telemetry.py`.
   im Installer erscheint ein klarer Konsolen-Hinweis zum Status (AN/AUS).
 - **Fehlertolerant:** kurzes Timeout (3 s), Fehler werden still geschluckt;
   Telemetrie blockiert Start/Betrieb nie.
+
+## Lizenz
+
+Für dieses Repository ist derzeit **keine Open-Source-Lizenz hinterlegt**. Ohne
+explizite Lizenz gelten die gesetzlichen Standardrechte, d. h. alle Rechte liegen
+beim Autor (`krockodog`). Wer den Code über das reine Ansehen hinaus nutzen,
+anpassen oder weitergeben möchte, klärt das bitte vorab mit dem Autor. Eine
+passende `LICENSE`-Datei (z. B. MIT) kann jederzeit ergänzt werden.
+
+## 🐜 Vision
+
+antbb beginnt mit **einem** Volk — der offensiven Königin und ihren Spähern, Spezialisten und Soldaten, die autorisierte Ziele aufklären, Schwächen aufspüren und beweisen, niemals zerstören. Doch ein einzelnes Volk ist erst der Anfang.
+
+**Das Blue-Team-Volk.** Neben die angreifende Königin tritt eine **verteidigende Königin** mit ihrem eigenen Ameisenvolk: Härtungs-Ameisen, die Funde direkt in Fixes übersetzen, Wächter-Ameisen, die Erreichbarkeit und Veränderungen überwachen, und Sanitäter-Ameisen, die aus jedem Angriff eine konkrete Gegenmaßnahme bauen. Was das rote Volk findet, verschließt das blaue Volk — im selben Bau, mit demselben Gedächtnis.
+
+**Das Reverse-Engineering-Volk.** Ein drittes Volk gräbt tiefer: Zerleger-Ameisen, die Binärdateien, Firmware und Protokolle auseinandernehmen, Spuren-Ameisen, die Logik rekonstruieren, und Übersetzer-Ameisen, die aus rohem Code verständliche Erkenntnis machen. Sie verstehen, *wie* Dinge gebaut sind — damit die anderen Völker wissen, wo sie ansetzen.
+
+**Die Verschmelzung.** Jedes Volk hat heute seinen eigenen Bau. Die Vision ist, dass die Völker nicht nebeneinander leben, sondern **zu einer einzigen Plattform verschmelzen**: ein gemeinsames Gedächtnis, in dem jede Ameise vom Wissen aller anderen lernt. Der Angreifer weiß, was der Verteidiger gehärtet hat; der Verteidiger weiß, was der Zerleger entdeckt hat; der Zerleger weiß, wonach der Angreifer sucht. Ein Schwarm, viele Kasten, ein Bau.
+
+Verspielt im Auftritt — lebendige Ameisen, die über den Bildschirm wuseln — aber mit echter, gebündelter Kraft darunter. Das Ziel: nicht viele kleine Werkzeuge, sondern **ein großes, zusammengewachsenes Framework**, in dem autorisierte Sicherheitsarbeit, Verteidigung und Verständnis als ein einziger, koordinierter Organismus funktionieren. Immer nachvollziehbar, immer unter menschlicher Aufsicht, immer nur im erlaubten Rahmen.
 
 ## Roadmap / noch nicht enthalten
 
