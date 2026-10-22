@@ -208,7 +208,7 @@
     <span id="scan-badge" class="badge">{{ scan_state.status }}</span>
   </h3>
   <pre id="live-feed" class="live-feed">Warte auf Events…</pre>
-  <p class="hint">Polling alle 1,5s · nur lokale on-device-Ausführung (kein Fernzugriff).</p>
+  <p class="hint">Echter WebSocket-Live-Feed (<code>/ws/feed</code>) · automatischer Fallback auf Polling (<code>/api/feed</code>) · nur lokale on-device-Ausführung (kein Fernzugriff).</p>
 </section>
 
 <section class="card">
@@ -270,6 +270,39 @@
       <label>CVSS-Score <input name="cvss" id="rb-cvss" type="number" step="0.1" min="0" max="10"></label>
       <label>CVSS-Vektor <input name="vector" id="rb-vector" placeholder="CVSS:3.1/AV:N/..."></label>
     </div>
+    <details class="card" id="cvss-calc" style="margin:.4rem 0">
+      <summary>🧮 CVSS-v3.1-Rechner (Metriken wählen → Score + Vektor automatisch)</summary>
+      <div class="row" style="flex-wrap:wrap;gap:.5rem;margin-top:.5rem">
+        <label>AV <select data-cvss="AV">
+          <option value="N">Network</option><option value="A">Adjacent</option>
+          <option value="L">Local</option><option value="P">Physical</option></select></label>
+        <label>AC <select data-cvss="AC">
+          <option value="L">Low</option><option value="H">High</option></select></label>
+        <label>PR <select data-cvss="PR">
+          <option value="N">None</option><option value="L">Low</option>
+          <option value="H">High</option></select></label>
+        <label>UI <select data-cvss="UI">
+          <option value="N">None</option><option value="R">Required</option></select></label>
+        <label>S <select data-cvss="S">
+          <option value="U">Unchanged</option><option value="C">Changed</option></select></label>
+        <label>C <select data-cvss="C">
+          <option value="N">None</option><option value="L">Low</option>
+          <option value="H">High</option></select></label>
+        <label>I <select data-cvss="I">
+          <option value="N">None</option><option value="L">Low</option>
+          <option value="H">High</option></select></label>
+        <label>A <select data-cvss="A">
+          <option value="N">None</option><option value="L">Low</option>
+          <option value="H">High</option></select></label>
+      </div>
+      <p style="margin:.5rem 0">
+        <strong>Base-Score:</strong> <span id="cvss-score" class="badge">—</span>
+        <strong>Severity:</strong> <span id="cvss-sev" class="badge">—</span>
+        <code id="cvss-vector-out"></code>
+        <button type="button" id="cvss-apply">↧ In Report übernehmen</button>
+      </p>
+      <p class="hint">Rechnet lokal über <code>/api/cvss</code> nach offizieller CVSS-3.1-Formel.</p>
+    </details>
     {% for key, label in chain_steps %}
       <label>{{ label }}<textarea name="chain_{{ key }}" id="rb-chain-{{ key }}" rows="2"></textarea></label>
     {% endfor %}
@@ -336,35 +369,89 @@ window.ANTBB = {
 <script type="module" src="/static/antmap3d.js"></script>
 <script>
 (function () {
+  // Echter WebSocket-Live-Feed mit robustem Fallback auf /api/feed-Polling.
   const feedEl = document.getElementById("live-feed");
   const badge = document.getElementById("scan-badge");
-  let since = 0;
+  let since = 0;            // Polling-Cursor
   let lastStatus = "";
-  async function tick() {
+  let usingWS = false;
+  let ws = null;
+  let wsRetries = 0;
+  let pollTimer = null;
+
+  function appendLines(events) {
+    if (!events || !events.length) return;
+    const lines = events.map(e => e.msg || JSON.stringify(e));
+    const prev = feedEl.textContent === "Warte auf Events…" ? "" : feedEl.textContent;
+    feedEl.textContent = (prev ? prev + "\n" : "") + lines.join("\n");
+    feedEl.scrollTop = feedEl.scrollHeight;
+  }
+
+  function applyData(data, opts) {
+    opts = opts || {};
+    if (data.backlog) {                 // vollständiger Anfangszustand (WS)
+      feedEl.textContent = "Warte auf Events…";
+    }
+    if (data.events && data.events.length) appendLines(data.events);
+    if (typeof data.total === "number") since = data.total;  // Cursor syncen
+    if (data.agents && window.AntMap) window.AntMap.updateAgents(data.agents, data.queen);
+    if (data.scan) {
+      badge.textContent = data.scan.status +
+        (data.scan.finding_count ? " · " + data.scan.finding_count + " Findings" : "");
+      if (data.scan.status === "done" && lastStatus === "running") {
+        location.reload();
+        return;
+      }
+      lastStatus = data.scan.status;
+    }
+  }
+
+  // ---- Polling-Fallback ----
+  async function poll() {
+    if (usingWS) return;                // WS aktiv -> kein Polling
     try {
       const r = await fetch("/api/feed?since=" + since);
       const data = await r.json();
-      if (data.events && data.events.length) {
-        const lines = data.events.map(e => e.msg || JSON.stringify(e));
-        const prev = feedEl.textContent === "Warte auf Events…" ? "" : feedEl.textContent;
-        feedEl.textContent = (prev ? prev + "\n" : "") + lines.join("\n");
-        feedEl.scrollTop = feedEl.scrollHeight;
-        since = data.total;
-      }
-      if (data.agents && window.AntMap) window.AntMap.updateAgents(data.agents, data.queen);
-      if (data.scan) {
-        badge.textContent = data.scan.status +
-          (data.scan.finding_count ? " · " + data.scan.finding_count + " Findings" : "");
-        if (data.scan.status === "done" && lastStatus === "running") {
-          location.reload();
-          return;
-        }
-        lastStatus = data.scan.status;
-      }
+      applyData(data);
     } catch (e) { /* still */ }
-    setTimeout(tick, 1500);
+    pollTimer = setTimeout(poll, 1500);
   }
-  tick();
+  function startPolling() {
+    if (pollTimer) clearTimeout(pollTimer);
+    poll();
+  }
+
+  // ---- WebSocket mit Reconnect/Backoff ----
+  function connectWS() {
+    if (!("WebSocket" in window)) { startPolling(); return; }
+    let proto = location.protocol === "https:" ? "wss:" : "ws:";
+    try {
+      ws = new WebSocket(proto + "//" + location.host + "/ws/feed");
+    } catch (e) { startPolling(); return; }
+
+    ws.onopen = function () { usingWS = true; wsRetries = 0; if (pollTimer) clearTimeout(pollTimer); };
+    ws.onmessage = function (ev) {
+      try { const data = JSON.parse(ev.data); if (!data.keepalive) applyData(data); }
+      catch (e) { /* ignore */ }
+    };
+    ws.onclose = function () {
+      usingWS = false;
+      wsRetries++;
+      if (wsRetries <= 5) {
+        // kurzer Reconnect-Versuch mit exponentiellem Backoff
+        setTimeout(connectWS, Math.min(1000 * Math.pow(2, wsRetries - 1), 15000));
+        // in der Zwischenzeit Polling, damit nichts verloren geht
+        startPolling();
+      } else {
+        startPolling();               // dauerhaft auf Polling zurückfallen
+      }
+    };
+    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+  }
+
+  connectWS();
+  // Sicherheitsnetz: falls WS nicht binnen 2.5s offen ist, parallel pollen.
+  setTimeout(function () { if (!usingWS) startPolling(); }, 2500);
 })();
 </script>
 <script>
@@ -397,6 +484,40 @@ window.ANTBB = {
     } catch (e) { note.textContent = "Prefill-Fehler: " + e; }
   }
   if (btn) btn.addEventListener("click", prefill);
+})();
+</script>
+<script>
+(function () {
+  const box = document.getElementById("cvss-calc");
+  if (!box) return;
+  const selects = Array.from(box.querySelectorAll("select[data-cvss]"));
+  const scoreEl = document.getElementById("cvss-score");
+  const sevEl = document.getElementById("cvss-sev");
+  const vecEl = document.getElementById("cvss-vector-out");
+  let last = null;
+  async function recompute() {
+    const params = new URLSearchParams();
+    selects.forEach(s => params.set(s.dataset.cvss, s.value));
+    try {
+      const r = await fetch("/api/cvss?" + params.toString());
+      if (!r.ok) { scoreEl.textContent = "Fehler"; return; }
+      const d = await r.json();
+      last = d;
+      scoreEl.textContent = d.base_score;
+      sevEl.textContent = d.severity;
+      vecEl.textContent = d.vector;
+    } catch (e) { scoreEl.textContent = "Fehler"; }
+  }
+  selects.forEach(s => s.addEventListener("change", recompute));
+  const applyBtn = document.getElementById("cvss-apply");
+  if (applyBtn) applyBtn.addEventListener("click", function () {
+    if (!last) return;
+    const sc = document.getElementById("rb-cvss");
+    const ve = document.getElementById("rb-vector");
+    if (sc) sc.value = last.base_score;
+    if (ve) ve.value = last.vector;
+  });
+  recompute();
 })();
 </script>
 {% endblock %}

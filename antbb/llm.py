@@ -60,8 +60,15 @@ class ProviderConfig:
 def _build_providers() -> dict[str, ProviderConfig]:
     out: dict[str, ProviderConfig] = {}
     for name, p in (_LLM_CFG.get("providers", {}) or {}).items():
-        api_style = "ollama" if name == "ollama" else "openai"
-        chat_path = "/api/chat" if api_style == "ollama" else "/chat/completions"
+        api_style = p.get("api_style") or ("ollama" if name == "ollama" else "openai")
+        if api_style == "ollama":
+            chat_path = "/api/chat"
+        elif api_style == "anthropic":
+            chat_path = "/v1/messages"
+        elif api_style == "gemini":
+            chat_path = ""  # Pfad wird pro Modell gebaut
+        else:
+            chat_path = "/chat/completions"
         out[name] = ProviderConfig(
             name=name,
             base_url=p.get("base_url", ""),
@@ -113,6 +120,9 @@ def _read_key(cfg: ProviderConfig) -> Optional[str]:
     if not cfg.key_env:
         return None
     val = os.environ.get(cfg.key_env)
+    if (not val or not val.strip()) and cfg.name == "gemini":
+        # Google akzeptiert beide Variablennamen.
+        val = os.environ.get("GOOGLE_API_KEY")
     if val and val.strip():
         return val.strip()
     return None
@@ -225,6 +235,10 @@ class LLMClient:
 
         if cfg.api_style == "ollama":
             return self._chat_ollama(cfg, mdl, messages, temperature, max_tokens)
+        if cfg.api_style == "anthropic":
+            return self._chat_anthropic(cfg, mdl, messages, temperature, max_tokens)
+        if cfg.api_style == "gemini":
+            return self._chat_gemini(cfg, mdl, messages, temperature, max_tokens)
 
         # OpenAI-kompatibel: Bearer aus Key ODER OAuth-Token
         key = _read_key(cfg) or _oauth_token(cfg)
@@ -275,6 +289,54 @@ class LLMClient:
         return ChatResult(ok=True, provider=cfg.name, model=mdl, status=200,
                           content=content, raw=data)
 
+    def _chat_anthropic(self, cfg, mdl, messages, temperature, max_tokens) -> ChatResult:
+        """Anthropic Messages API. System-Prompt wird separat uebergeben;
+        nur user/assistant-Rollen in messages. Fehlender Key -> sauberer Fehler."""
+        key = _read_key(cfg)
+        if not key:
+            return ChatResult(ok=False, provider=cfg.name, model=mdl,
+                              error=f"Provider {cfg.name} nicht konfiguriert "
+                                    f"(Env-Var {cfg.key_env} nicht gesetzt).")
+        system_parts = [m.get("content", "") for m in messages if m.get("role") == "system"]
+        conv = [{"role": ("assistant" if m.get("role") == "assistant" else "user"),
+                 "content": m.get("content", "")}
+                for m in messages if m.get("role") in ("user", "assistant")]
+        payload = {"model": mdl, "max_tokens": max_tokens,
+                   "temperature": temperature, "messages": conv}
+        if system_parts:
+            payload["system"] = "\n\n".join(p for p in system_parts if p)
+        url = cfg.base_url.rstrip("/") + "/v1/messages"
+        headers = {"x-api-key": key, "anthropic-version": "2023-06-01",
+                   "Content-Type": "application/json"}
+        return self._post(cfg, mdl, url, headers, payload, kind="anthropic")
+
+    def _chat_gemini(self, cfg, mdl, messages, temperature, max_tokens) -> ChatResult:
+        """Google Generative Language API (generateContent). Key als Query-Param.
+        Fehlender Key -> sauberer Fehler, kein Crash."""
+        key = _read_key(cfg)
+        if not key:
+            return ChatResult(ok=False, provider=cfg.name, model=mdl,
+                              error=f"Provider {cfg.name} nicht konfiguriert "
+                                    f"(Env-Var {cfg.key_env}/GOOGLE_API_KEY nicht gesetzt).")
+        system_parts = [m.get("content", "") for m in messages if m.get("role") == "system"]
+        contents = []
+        for m in messages:
+            role = m.get("role")
+            if role == "system":
+                continue
+            contents.append({"role": ("model" if role == "assistant" else "user"),
+                             "parts": [{"text": m.get("content", "")}]})
+        payload = {"contents": contents,
+                   "generationConfig": {"temperature": temperature,
+                                        "maxOutputTokens": max_tokens}}
+        if system_parts:
+            payload["systemInstruction"] = {"parts": [{"text": "\n\n".join(
+                p for p in system_parts if p)}]}
+        base = cfg.base_url.rstrip("/")
+        url = f"{base}/models/{mdl}:generateContent?key={key}"
+        headers = {"Content-Type": "application/json"}
+        return self._post(cfg, mdl, url, headers, payload, kind="gemini")
+
     def _post(self, cfg, mdl, url, headers, payload, kind) -> ChatResult:
         import httpx
         last_err = ""
@@ -289,7 +351,8 @@ class LLMClient:
                 if resp.status_code == 200:
                     data = resp.json()
                     return ChatResult(ok=True, provider=cfg.name, model=mdl,
-                                      status=200, content=_extract_content(data),
+                                      status=200,
+                                      content=_extract_content(data, kind),
                                       raw=data)
                 last_err = f"HTTP {resp.status_code}: {_safe_body(resp)}"
                 if 400 <= resp.status_code < 500 and resp.status_code != 429:
@@ -303,8 +366,15 @@ class LLMClient:
                           status=last_status, error=last_err)
 
 
-def _extract_content(data: dict[str, Any]) -> str:
+def _extract_content(data: dict[str, Any], kind: str = "openai") -> str:
     try:
+        if kind == "anthropic":
+            blocks = data.get("content") or []
+            return "".join(b.get("text", "") for b in blocks if isinstance(b, dict))
+        if kind == "gemini":
+            cand = (data.get("candidates") or [])[0]
+            parts = (cand.get("content") or {}).get("parts") or []
+            return "".join(p.get("text", "") for p in parts if isinstance(p, dict))
         return data["choices"][0]["message"]["content"] or ""
     except (KeyError, IndexError, TypeError):
         return ""

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Run-Historie · Exporte · antbb{% endblock %}
+{% block content %}
+<p><a href="/">← zurück</a></p>
+<h2>🗂️ Run-Historie &amp; Export-Index</h2>
+
+<section class="card">
+  <h3>Läufe ({{ runs|length }})</h3>
+  <input type="text" id="run-filter" placeholder="Filter (Ziel/Modus/Status)…" style="max-width:420px;margin:.3rem 0">
+  <table id="runs-table">
+    <thead><tr>
+      <th data-sort>Zeit</th><th data-sort>Ziel</th><th data-sort>Modus</th>
+      <th data-sort>Findings</th><th data-sort>Status</th><th>Verteilung</th>
+    </tr></thead>
+    <tbody>
+    {% for r in runs %}
+      <tr>
+        <td data-ts="{{ r.created_at or 0 }}">{{ r.when }}</td>
+        <td>{{ r.target_name }} <small>#{{ r.target_id }}</small></td>
+        <td>{{ r.mode }}{% if r.active %} · active{% endif %}{% if r.fuzz %} · fuzz{% endif %}</td>
+        <td>{{ r.finding_count }}</td>
+        <td>{% if r.status == 'done' %}<span class="ok">done</span>
+            {% else %}<span class="blocked">{{ r.status }}</span>{% endif %}</td>
+        <td><small>{{ r.severity_str }}</small></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">Noch keine Läufe aufgezeichnet.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h3>Export-Index ({{ exports|length }})</h3>
+  <p class="hint">Alle erzeugten Reports/Exporte (PDF/JSON/MD/HTML) mit Download-Link.</p>
+  <ul>
+  {% for e in exports %}
+    <li><a href="/exports/{{ e.name }}" target="_blank">{{ e.name }}</a>
+      <small>· {{ e.kind }} · {{ e.size_kb }} KB · {{ e.when }}</small></li>
+  {% else %}
+    <li>Keine Exporte gefunden.</li>
+  {% endfor %}
+  </ul>
+</section>
+
+<script>
+(function(){
+  var f=document.getElementById("run-filter");
+  if(f) f.addEventListener("input",function(){
+    var q=f.value.toLowerCase();
+    document.querySelectorAll("#runs-table tbody tr").forEach(function(tr){
+      tr.style.display = tr.textContent.toLowerCase().indexOf(q)>=0 ? "" : "none";
+    });
+  });
+  // simple column sort
+  document.querySelectorAll("#runs-table th[data-sort]").forEach(function(th,idx){
+    th.style.cursor="pointer";
+    th.addEventListener("click",function(){
+      var tb=document.querySelector("#runs-table tbody");
+      var rows=Array.prototype.slice.call(tb.querySelectorAll("tr"));
+      var asc=!(th._asc); th._asc=asc;
+      rows.sort(function(a,b){
+        var x=a.children[idx], y=b.children[idx];
+        var xv=x.dataset.ts||x.textContent.trim();
+        var yv=y.dataset.ts||y.textContent.trim();
+        var nx=parseFloat(xv), ny=parseFloat(yv);
+        if(!isNaN(nx)&&!isNaN(ny)){return asc?nx-ny:ny-nx;}
+        return asc?xv.localeCompare(yv):yv.localeCompare(xv);
+      });
+      rows.forEach(function(r){tb.appendChild(r);});
+    });
+  });
+})();
+</script>
+{% endblock %}

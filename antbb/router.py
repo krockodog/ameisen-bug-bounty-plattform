@@ -28,8 +28,10 @@ CRITICAL_TASK_TYPES = set(_ROUTER_CFG.get("critical_task_types", []))
 COMPLEXITY_THRESHOLD = float(_ROUTER_CFG.get("complexity_threshold", 0.5))
 
 #: Präferenz-Reihenfolge für starke ("decision") vs. schnelle ("fast") Modelle.
-STRONG_PRIORITY = ["openai", "kimi", "minimax"]
-FAST_PRIORITY = ["ollama", "minimax", "kimi", "openai"]
+STRONG_PRIORITY = ["openai", "anthropic", "gemini", "xai", "deepseek",
+                   "mistral", "moonshot", "minimax"]
+FAST_PRIORITY = ["ollama", "gemini", "mistral", "minimax", "deepseek",
+                 "moonshot", "openai", "anthropic", "xai"]
 
 
 @dataclass

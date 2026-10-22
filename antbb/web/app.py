@@ -7,16 +7,22 @@ in einem Hintergrund-Thread; der Live-Feed wird per Polling abgeholt.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import threading
 import time
 from typing import Any, Optional
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import (FastAPI, Form, HTTPException, Request, WebSocket,
+                     WebSocketDisconnect)
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+
+from .. import cvss as cvss_mod
+from .. import webauth as webauth_mod
+from .. import assetchecks as assetchecks_mod
 
 from ..disclaimer import DISCLAIMER_TEXT, new_target_notice
 from ..oversight import OVERSIGHT_PROMPT, OversightError
@@ -37,14 +43,6 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="
 
 svc = AntBBService()
 
-# ---- Optionale, anonyme Telemetrie (standardmäßig AUS; siehe antbb/telemetry.py) ----
-@app.on_event("startup")
-def _telemetry_startup() -> None:
-    # Klarer Konsolen-Hinweis zum Status (an/aus) – nichts versteckt.
-    print("[antbb] " + telemetry.status_line())
-    # Heartbeat-Task startet NUR, wenn ANTBB_TELEMETRY_URL gesetzt und nicht abgeschaltet.
-    telemetry.start_heartbeat()
-
 # ---- On-device Scan-Zustand (kein Fernzugriff; nur lokaler Prozess) ----
 LIVE_FEED: list[dict] = []
 SCAN_STATE: dict[str, Any] = {
@@ -58,6 +56,66 @@ SCAN_STATE: dict[str, Any] = {
     "finding_count": 0,
 }
 _SCAN_LOCK = threading.Lock()
+
+
+# ---- WebSocket-Live-Feed: einfacher Broadcast/Pub-Sub an verbundene Clients ----
+class FeedHub:
+    """Thread-sicherer Broadcast an WebSocket-Clients.
+
+    Der Scan laeuft in einem Thread; die WS-Handler leben im asyncio-Loop.
+    publish() wird aus dem Thread aufgerufen und stellt die Events ueber
+    loop.call_soon_threadsafe in die Queues der verbundenen Clients.
+    Faellt der WS aus, nutzt der Client das bestehende /api/feed-Polling.
+    """
+
+    def __init__(self) -> None:
+        self._queues: set[asyncio.Queue] = set()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._lock = threading.Lock()
+
+    def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        self._loop = loop
+
+    def register(self) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=1000)
+        with self._lock:
+            self._queues.add(q)
+        return q
+
+    def unregister(self, q: asyncio.Queue) -> None:
+        with self._lock:
+            self._queues.discard(q)
+
+    def publish(self, message: dict) -> None:
+        loop = self._loop
+        if loop is None:
+            return
+        with self._lock:
+            queues = list(self._queues)
+        for q in queues:
+            try:
+                loop.call_soon_threadsafe(q.put_nowait, message)
+            except Exception:
+                pass
+
+
+FEED_HUB = FeedHub()
+
+
+def _push_feed(ev: dict) -> None:
+    """Zentraler Event-Eingang: an Polling-Puffer + Agentenstatus + WS-Hub."""
+    LIVE_FEED.append(ev)
+    try:
+        _update_agents(ev)
+    except Exception:
+        pass
+    try:
+        FEED_HUB.publish({
+            "events": [ev], "total": len(LIVE_FEED),
+            "scan": dict(SCAN_STATE), **_agents_payload(),
+        })
+    except Exception:
+        pass
 
 # ---- Pro-Agent-Zustand für das Node-Visualisierungslayer ----
 # Reihenfolge entspricht der Schwarm-Topologie; Bereich "web" (erweiterbar).
@@ -157,6 +215,38 @@ def _rowdict(row):
     return {k: row[k] for k in row.keys()} if row else None
 
 
+def _record_run_history(target_id: int, active: bool = False, fuzz: bool = False,
+                        offensive: Optional[bool] = None, status: str = "done",
+                        result=None, error: str = "") -> None:
+    """Haelt einen abgeschlossenen/abgebrochenen Lauf persistent fest (Run-Historie)."""
+    try:
+        t = svc.get_target(target_id)
+        tname = t["name"] if t else ""
+    except Exception:
+        tname = ""
+    off = bool(offensive) or bool(active) or bool(fuzz)
+    mode = "offensive" if off else "defensive"
+    sev = {}
+    fc = 0
+    rid = None
+    started = SCAN_STATE.get("started_at")
+    finished = SCAN_STATE.get("finished_at") or time.time()
+    if result is not None:
+        try:
+            sev = result.by_severity()
+            fc = len(result.findings)
+            rid = result.run_id
+        except Exception:
+            pass
+    dur = (finished - started) if (started and finished) else None
+    svc.store.add_run_history(
+        run_id=rid, target_id=target_id, target_name=tname, mode=mode,
+        active=bool(active), fuzz=bool(fuzz), offensive=bool(offensive),
+        status=status, finding_count=fc, severity=sev, error=error,
+        started_at=started, finished_at=finished, duration=dur,
+    )
+
+
 def _start_scan_async(target_id: int, active: bool, fuzz: bool,
                       phases: Optional[tuple] = None,
                       offensive: Optional[bool] = None,
@@ -174,8 +264,7 @@ def _start_scan_async(target_id: int, active: bool, fuzz: bool,
         })
 
     def _emit(ev: dict) -> None:
-        LIVE_FEED.append(ev)
-        _update_agents(ev)
+        _push_feed(ev)
 
     def _worker() -> None:
         try:
@@ -193,22 +282,45 @@ def _start_scan_async(target_id: int, active: bool, fuzz: bool,
                     "finding_count": len(result.findings),
                 })
             _finish_agents("done")
+            try:
+                _record_run_history(target_id, active=active, fuzz=fuzz,
+                                    offensive=offensive, status="done",
+                                    result=result)
+            except Exception:
+                pass
+            try:
+                FEED_HUB.publish({"events": [], "total": len(LIVE_FEED),
+                                  "scan": dict(SCAN_STATE), **_agents_payload()})
+            except Exception:
+                pass
         except OversightError as exc:
             with _SCAN_LOCK:
                 SCAN_STATE.update({
                     "status": "error", "error": str(exc),
                     "finished_at": time.time(),
                 })
-            LIVE_FEED.append({"ts": time.time(), "msg": f"⛔ {exc}"})
+            _push_feed({"ts": time.time(), "msg": f"⛔ {exc}"})
             _finish_agents("blocked")
+            try:
+                _record_run_history(target_id, active=active, fuzz=fuzz,
+                                    offensive=offensive, status="error",
+                                    error=str(exc))
+            except Exception:
+                pass
         except Exception as exc:
             with _SCAN_LOCK:
                 SCAN_STATE.update({
                     "status": "error", "error": str(exc),
                     "finished_at": time.time(),
                 })
-            LIVE_FEED.append({"ts": time.time(), "msg": f"❌ Scan-Fehler: {exc}"})
+            _push_feed({"ts": time.time(), "msg": f"❌ Scan-Fehler: {exc}"})
             _finish_agents("blocked")
+            try:
+                _record_run_history(target_id, active=active, fuzz=fuzz,
+                                    offensive=offensive, status="error",
+                                    error=str(exc))
+            except Exception:
+                pass
 
     threading.Thread(target=_worker, daemon=True, name="antbb-scan").start()
     return {"ok": True, "status": "running", "target_id": target_id}
@@ -1455,6 +1567,341 @@ async def _maybe_json(request: Request) -> Optional[dict]:
     except Exception:
         return None
     return None
+
+
+# ==========================================================================
+#  Startup: Event-Loop an den Feed-Hub binden + optionalen Admin bootstrappen
+# ==========================================================================
+@app.on_event("startup")
+async def _on_startup() -> None:
+    try:
+        FEED_HUB.bind_loop(asyncio.get_running_loop())
+    except Exception:
+        pass
+    # Optionale, anonyme Telemetrie (standardmaessig AUS; siehe antbb/telemetry.py).
+    try:
+        print("[antbb] " + telemetry.status_line())
+        telemetry.start_heartbeat()
+    except Exception:
+        pass
+    try:
+        svc.store.purge_expired_sessions()
+    except Exception:
+        pass
+    if webauth_mod.auth_enabled():
+        try:
+            created = webauth_mod.bootstrap_admin(svc.store)
+            if created:
+                # NIE das Passwort loggen – nur den Benutzernamen.
+                print(f"[antbb.auth] Admin '{created}' aus ENV angelegt.")
+        except Exception:
+            pass
+
+
+# ==========================================================================
+#  Optionale Authentifizierung (ANTBB_AUTH=1). Default: AUS (Einzelnutzer).
+# ==========================================================================
+_AUTH_PUBLIC_EXACT = {"/login", "/logout", "/api/health", "/favicon.ico"}
+
+
+def _auth_is_public(path: str) -> bool:
+    if path in _AUTH_PUBLIC_EXACT:
+        return True
+    return path.startswith("/static") or path.startswith("/ws")
+
+
+def _auth_needs_admin(path: str, method: str) -> bool:
+    """Human-only-Aktionen (brain-reset/delete) bleiben strikt admin-geschuetzt."""
+    if not path.startswith("/api/brain"):
+        return False
+    if method == "DELETE":
+        return True
+    if method == "POST" and ("/reset" in path):
+        return True
+    return False
+
+
+@app.middleware("http")
+async def _auth_middleware(request: Request, call_next):
+    if not webauth_mod.auth_enabled():
+        return await call_next(request)
+    path = request.url.path
+    if _auth_is_public(path):
+        return await call_next(request)
+    token = request.cookies.get(webauth_mod.COOKIE_NAME)
+    sess = None
+    try:
+        sess = webauth_mod.session_user(svc.store, token)
+    except Exception:
+        sess = None
+    if not sess:
+        if path.startswith("/api"):
+            return JSONResponse({"error": "Authentifizierung erforderlich"}, status_code=401)
+        return RedirectResponse(url=f"/login?next={path}", status_code=303)
+    # Rollen-Gate fuer human-only-Aktionen
+    if _auth_needs_admin(path, request.method) and sess["role"] != "admin":
+        return JSONResponse(
+            {"error": "Nur Admins duerfen diese human-only-Aktion ausfuehren."},
+            status_code=403)
+    request.state.user = {"username": sess["username"], "role": sess["role"]}
+    return await call_next(request)
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, next: str = "/", error: str = ""):
+    return templates.TemplateResponse(request, "login.html", {
+        "next": next, "error": error, "disclaimer": DISCLAIMER_TEXT,
+    })
+
+
+@app.post("/login")
+def login_submit(username: str = Form(...), password: str = Form(...),
+                 next: str = Form("/")):
+    row = webauth_mod.authenticate(svc.store, username, password)
+    if not row:
+        return RedirectResponse(
+            url="/login?error=Benutzername+oder+Passwort+falsch", status_code=303)
+    token = webauth_mod.start_session(svc.store, row)
+    dest = next if (next or "").startswith("/") else "/"
+    resp = RedirectResponse(url=dest, status_code=303)
+    resp.set_cookie(webauth_mod.COOKIE_NAME, token, httponly=True,
+                    samesite="lax", max_age=86400 * 7)
+    return resp
+
+
+@app.get("/logout")
+@app.post("/logout")
+def logout(request: Request):
+    token = request.cookies.get(webauth_mod.COOKIE_NAME)
+    if token:
+        try:
+            svc.store.delete_session(token)
+        except Exception:
+            pass
+    resp = RedirectResponse(url="/login", status_code=303)
+    resp.delete_cookie(webauth_mod.COOKIE_NAME)
+    return resp
+
+
+@app.get("/api/auth/status")
+def api_auth_status(request: Request):
+    user = getattr(request.state, "user", None)
+    return {"auth_enabled": webauth_mod.auth_enabled(), "user": user}
+
+
+# ==========================================================================
+#  Echter WebSocket-Live-Feed (Fallback: /api/feed-Polling im Client)
+# ==========================================================================
+@app.websocket("/ws/feed")
+async def ws_feed(ws: WebSocket):
+    await ws.accept()
+    q = FEED_HUB.register()
+    try:
+        # Backlog + aktuellen Zustand sofort senden.
+        await ws.send_json({
+            "events": list(LIVE_FEED), "total": len(LIVE_FEED),
+            "scan": dict(SCAN_STATE), **_agents_payload(), "backlog": True,
+        })
+        while True:
+            try:
+                msg = await asyncio.wait_for(q.get(), timeout=25.0)
+                await ws.send_json(msg)
+            except asyncio.TimeoutError:
+                # Keepalive, damit Proxies die Verbindung nicht kappen.
+                await ws.send_json({"keepalive": True, "total": len(LIVE_FEED),
+                                    "scan": dict(SCAN_STATE)})
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        FEED_HUB.unregister(q)
+
+
+# ==========================================================================
+#  CVSS-v3.1-Rechner
+# ==========================================================================
+@app.get("/api/cvss")
+def api_cvss(request: Request, vector: Optional[str] = None,
+             AV: Optional[str] = None, AC: Optional[str] = None,
+             PR: Optional[str] = None, UI: Optional[str] = None,
+             S: Optional[str] = None, C: Optional[str] = None,
+             I: Optional[str] = None, A: Optional[str] = None):
+    """Base-Score + Severity + kanonischer Vektor aus Vektor-String ODER Metriken."""
+    try:
+        if vector:
+            return cvss_mod.score_from_vector(vector)
+        metrics = {"AV": AV, "AC": AC, "PR": PR, "UI": UI,
+                   "S": S, "C": C, "I": I, "A": A}
+        if all(v for v in metrics.values()):
+            return cvss_mod.score_from_metrics(metrics)
+        raise HTTPException(400, "Entweder vector=... oder alle Metriken "
+                                 "(AV,AC,PR,UI,S,C,I,A) angeben.")
+    except cvss_mod.CVSSError as exc:
+        raise HTTPException(400, str(exc))
+
+
+# ==========================================================================
+#  Opt-in eigene Assets: TLS-/Header-Checks (default-deny, nur bestaetigt)
+# ==========================================================================
+@app.get("/assets", response_class=HTMLResponse)
+def assets_page(request: Request):
+    assets = [_rowdict(a) for a in svc.store.list_owned_assets()]
+    checks = [_rowdict(c) for c in svc.store.list_asset_check_runs(limit=25)]
+    return templates.TemplateResponse(request, "assets.html", {
+        "assets": assets, "checks": checks, "disclaimer": DISCLAIMER_TEXT,
+    })
+
+
+@app.post("/assets/add")
+def assets_add(host: str = Form(...), port: int = Form(443),
+               label: str = Form(""), confirm_owner: str = Form("off")):
+    host = (host or "").strip().replace("https://", "").replace("http://", "").split("/")[0]
+    if not host:
+        raise HTTPException(400, "Host fehlt.")
+    confirmed = confirm_owner == "on"
+    svc.store.add_owned_asset(host, int(port), label=label,
+                              confirmed_owner=confirmed,
+                              confirmed_by="web-user" if confirmed else "")
+    return RedirectResponse(url="/assets", status_code=303)
+
+
+@app.post("/assets/{asset_id}/confirm")
+def assets_confirm(asset_id: int):
+    svc.store.set_owned_asset_confirmed(asset_id, True, confirmed_by="web-user")
+    return RedirectResponse(url="/assets", status_code=303)
+
+
+@app.post("/assets/{asset_id}/delete")
+def assets_delete(asset_id: int):
+    svc.store.delete_owned_asset(asset_id)
+    return RedirectResponse(url="/assets", status_code=303)
+
+
+@app.post("/assets/{asset_id}/check")
+def assets_check_form(asset_id: int, kind: str = Form("tls")):
+    try:
+        assetchecks_mod.run_check(svc.store, asset_id, kind)
+    except assetchecks_mod.AssetOwnershipError as exc:
+        raise HTTPException(403, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+    return RedirectResponse(url="/assets", status_code=303)
+
+
+@app.get("/api/assets")
+def api_assets():
+    return [_rowdict(a) for a in svc.store.list_owned_assets()]
+
+
+@app.post("/api/assets")
+def api_assets_add(payload: dict):
+    host = (payload.get("host") or "").strip()
+    if not host:
+        raise HTTPException(400, "host fehlt.")
+    aid = svc.store.add_owned_asset(
+        host, int(payload.get("port", 443)), label=payload.get("label", ""),
+        confirmed_owner=bool(payload.get("confirm_owner", False)),
+        confirmed_by="api-user" if payload.get("confirm_owner") else "")
+    return {"id": aid}
+
+
+@app.post("/api/assets/{asset_id}/check")
+def api_assets_check(asset_id: int, payload: Optional[dict] = None):
+    kind = (payload or {}).get("kind", "tls")
+    try:
+        return assetchecks_mod.run_check(svc.store, asset_id, kind)
+    except assetchecks_mod.AssetOwnershipError as exc:
+        raise HTTPException(403, str(exc))
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@app.get("/api/assets/{asset_id}/checks")
+def api_assets_checks(asset_id: int):
+    return [_rowdict(c) for c in svc.store.list_asset_check_runs(asset_id)]
+
+
+# ==========================================================================
+#  Persistente Run-Historie + Export-Index
+# ==========================================================================
+def _fmt_ts(ts) -> str:
+    if not ts:
+        return ""
+    try:
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(float(ts)))
+    except Exception:
+        return ""
+
+
+@app.get("/api/runs")
+def api_runs(target_id: Optional[int] = None):
+    out = []
+    for r in svc.store.list_run_history(target_id):
+        d = _rowdict(r)
+        d["when"] = _fmt_ts(d.get("created_at"))
+        out.append(d)
+    return out
+
+
+def _export_index() -> list[dict]:
+    import json as _json
+    exports_dir = os.path.join(
+        os.path.dirname(os.path.dirname(BASE)), "data", "exports")
+    items = []
+    try:
+        for name in sorted(os.listdir(exports_dir), reverse=True):
+            fp = os.path.join(exports_dir, name)
+            if not os.path.isfile(fp):
+                continue
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            st = os.stat(fp)
+            items.append({
+                "name": name, "kind": ext or "datei",
+                "size_kb": round(st.st_size / 1024, 1),
+                "when": _fmt_ts(st.st_mtime),
+            })
+    except FileNotFoundError:
+        pass
+    return items
+
+
+@app.get("/api/exports")
+def api_exports():
+    return _export_index()
+
+
+@app.get("/exports/{name}")
+def download_export(name: str):
+    from fastapi.responses import FileResponse
+    # Pfad-Traversal verhindern: nur Dateiname, kein Verzeichniswechsel.
+    safe = os.path.basename(name)
+    if safe != name or not safe:
+        raise HTTPException(400, "Ungueltiger Dateiname.")
+    exports_dir = os.path.join(
+        os.path.dirname(os.path.dirname(BASE)), "data", "exports")
+    fp = os.path.join(exports_dir, safe)
+    if not os.path.isfile(fp):
+        raise HTTPException(404, "Export nicht gefunden.")
+    return FileResponse(fp, filename=safe)
+
+
+@app.get("/history", response_class=HTMLResponse)
+def history_page(request: Request):
+    import json as _json
+    runs = []
+    for r in svc.store.list_run_history():
+        d = _rowdict(r)
+        d["when"] = _fmt_ts(d.get("created_at"))
+        try:
+            sev = _json.loads(d.get("severity") or "{}")
+            d["severity_str"] = ", ".join(f"{k}:{v}" for k, v in sev.items()) or "—"
+        except Exception:
+            d["severity_str"] = "—"
+        runs.append(d)
+    return templates.TemplateResponse(request, "history.html", {
+        "runs": runs, "exports": _export_index(), "disclaimer": DISCLAIMER_TEXT,
+    })
 
 
 # ---------------- Routen-Reihenfolge: literale /api/brain/*-Pfade zuerst ----------------

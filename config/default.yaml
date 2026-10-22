@@ -20,56 +20,104 @@ llm:
   fast_model: MiniMax-M3.1-Flash
 
   providers:
+    # ---------------------------------------------------------------------
+    # Austauschbare LLM-Provider. api_style bestimmt Request-/Response-Format:
+    #   openai    -> POST {base_url}/chat/completions, Bearer-Key (OpenAI-kompat.)
+    #   anthropic -> POST {base_url}/v1/messages, Header x-api-key + anthropic-version
+    #   gemini    -> POST {base_url}/models/{model}:generateContent?key=... (Google)
+    #   ollama    -> POST {base_url}/api/chat (lokal, keine Auth)
+    # Keys kommen AUSSCHLIESSLICH aus den genannten Env-Vars zur Laufzeit.
+    # Es ist KEIN Key im Repo hinterlegt; fehlt der Key -> Provider wird sauber
+    # uebersprungen (kein Crash).
+    # ---------------------------------------------------------------------
+    openai:
+      base_url: https://api.openai.com/v1
+      api_style: openai
+      auth_mode: key
+      oauth_available: true
+      key_env: OPENAI_API_KEY
+      default_model: gpt-4o
+      fast_model: gpt-4o-mini
+      oauth:
+        authorize_url: https://auth.openai.com/api/accounts/authorize
+        token_url: https://auth.openai.com/api/accounts/oauth/token
+        redirect_path: /auth/openai/callback
+        scopes: "openid profile email offline_access"
+
+    anthropic:
+      # Anthropic Messages API (docs.anthropic.com). Eigenes Format.
+      base_url: https://api.anthropic.com
+      api_style: anthropic
+      auth_mode: key
+      oauth_available: false
+      key_env: ANTHROPIC_API_KEY
+      default_model: claude-3-5-sonnet-latest
+      fast_model: claude-3-5-haiku-latest
+
+    gemini:
+      # Google Generative Language API (ai.google.dev). Key als Query-Param.
+      # Akzeptiert GEMINI_API_KEY ODER GOOGLE_API_KEY (siehe llm_providers.py).
+      base_url: https://generativelanguage.googleapis.com/v1beta
+      api_style: gemini
+      auth_mode: key
+      oauth_available: false
+      key_env: GEMINI_API_KEY
+      default_model: gemini-1.5-pro
+      fast_model: gemini-1.5-flash
+
     minimax:
       base_url: https://api.minimax.io/v1
-      # auth_mode: key = Env-Var-Key; oauth = OAuth-Flow; none = keine Auth.
+      api_style: openai
       auth_mode: key
-      # Recherche: MiniMax dokumentiert KEINEN OAuth-2.0-Flow für API-Zugang
-      # (Bearer-API-Key). oauth_available=false → Key-Modus (Fallback).
       oauth_available: false
       key_env: MINIMAX_API_KEY
       default_model: MiniMax-M3
       fast_model: MiniMax-M3.1-Flash
 
-    openai:
-      base_url: https://api.openai.com/v1
-      # Recherche: OpenAI bietet "Sign in with ChatGPT" (OAuth 2.0 Auth-Code +
-      # PKCE) für berechtigte Dritt-/Open-Source-Apps, um den ChatGPT-Plan über
-      # die Responses-API zu nutzen. Standard-API-Zugang bleibt Bearer-API-Key.
-      # auth_mode=key = aktiver Fallback; OAuth ist verfügbar (oauth_available),
-      # aber bis zur Anmeldung gilt der Key-Modus.
-      auth_mode: key
-      oauth_available: true
-      key_env: OPENAI_API_KEY
-      default_model: gpt-4o-mini
-      fast_model: gpt-4o-mini
-      oauth:
-        authorize_url: https://auth.openai.com/api/accounts/authorize
-        token_url: https://auth.openai.com/api/accounts/oauth/token
-        # Loopback-Redirect auf die lokale antbb-Weboberfläche.
-        redirect_path: /auth/openai/callback
-        scopes: "openid profile email offline_access"
-        # Hinweis: Der vollständige "Sign in with ChatGPT"-Flow nutzt dynamische
-        # Client-Registrierung (client_id=dynamic_agent_client). Es werden hier
-        # KEINE Client-IDs/Secrets erfunden – sie entstehen zur Laufzeit im Flow.
-
-    kimi:
+    moonshot:
+      # Moonshot / Kimi Open Platform (OpenAI-kompatibel).
       base_url: https://api.moonshot.ai/v1
-      # Recherche: Moonshot/Kimi Open Platform nutzt API-KEYS (kein Auth-Code-
-      # OAuth für API-Zugang). Nur das separate Produkt "Kimi Code" hat einen
-      # Device-Code-OAuth-Login (managed service), NICHT die Open-Platform-API.
-      # Daher: Login-/Plan-Modus-Platzhalter, "bereit zur Anmeldung". Es wird
-      # KEINE KIMI_API_KEY-Env-Var angelegt, solange der Nutzer keinen Key nennt.
-      auth_mode: login
+      api_style: openai
+      auth_mode: key
       oauth_available: false
-      key_env: null
+      key_env: MOONSHOT_API_KEY
       default_model: kimi-k2-0905-preview
       fast_model: kimi-k2-0905-preview
 
+    mistral:
+      # Mistral AI (OpenAI-kompatible Chat-Completions, docs.mistral.ai).
+      base_url: https://api.mistral.ai/v1
+      api_style: openai
+      auth_mode: key
+      oauth_available: false
+      key_env: MISTRAL_API_KEY
+      default_model: mistral-large-latest
+      fast_model: mistral-small-latest
+
+    deepseek:
+      # DeepSeek (OpenAI-kompatibel, api-docs.deepseek.com).
+      base_url: https://api.deepseek.com/v1
+      api_style: openai
+      auth_mode: key
+      oauth_available: false
+      key_env: DEEPSEEK_API_KEY
+      default_model: deepseek-chat
+      fast_model: deepseek-chat
+
+    xai:
+      # xAI Grok (OpenAI-kompatibel, docs.x.ai). Modellnamen aendern sich haeufig
+      # -> ueber Env/Config anpassbar. TODO: aktuellen Modellnamen pruefen.
+      base_url: https://api.x.ai/v1
+      api_style: openai
+      auth_mode: key
+      oauth_available: false
+      key_env: XAI_API_KEY
+      default_model: grok-2-latest
+      fast_model: grok-2-latest
+
     ollama:
-      # Lokaler Provider, keine Authentifizierung. Natives /api/chat (stabilster
-      # Pfad über alle Ollama-Versionen).
       base_url: http://localhost:11434
+      api_style: ollama
       auth_mode: none
       oauth_available: false
       key_env: null

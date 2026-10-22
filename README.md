@@ -38,7 +38,7 @@ bash install-and-start.sh
 # → Startseite z. B. http://127.0.0.1:1001/
 ```
 
-Beim Start optional Key abfragen (Enter = ohne Key). Details: **INSTALL.md**. Secrets nur zur Laufzeit (`MINIMAX_API_KEY`, Host `api.minimax.io`) – nie eingebettet. Diese Distribution ist keyfrei und anonymisiert.
+Beim Start optional Key abfragen (Enter = ohne Key). Details: **INSTALL.md**. Secrets (Provider-API-Keys, Tunnel-Token) werden nur zur Laufzeit als Umgebungsvariablen gesetzt – nie eingebettet. Diese Distribution ist keyfrei und anonymisiert.
 
 Ein **rein lokales** Framework zum Üben von Bug-Bounty-/Pentest-Workflows.
 Es tritt **keiner** externen Plattform (HackerOne, Bugcrowd, …) bei und führt
@@ -181,31 +181,17 @@ API antwortet dann mit **HTTP 403**.
 
 ## LLM-Connector (optional)
 
-Das Framework kann Königin und Agenten optional von einem LLM unterstützen
-lassen (OpenAI-kompatible Chat-Completions-API). Modul: `antbb/llm.py`.
+Das Framework kann Königin und Agenten **optional** von einem LLM unterstützen
+lassen. Modul: `antbb/llm.py` (+ austauschbare Adapter in `antbb/llm_providers.py`).
 
-- **Keys** werden AUSSCHLIESSLICH aus Umgebungsvariablen gelesen und niemals
-  geloggt, geechot, in DB oder Reports geschrieben.
-- **Standard-Provider: MiniMax** (`https://api.minimax.io/v1`, Key aus
-  `MINIMAX_API_KEY`, Standardmodell `MiniMax-M3`).
-- Weitere Provider sind in `PROVIDERS` vorkonfiguriert (OpenAI via
-  `OPENAI_API_KEY`, Kimi/Moonshot via `MOONSHOT_API_KEY`) und werden aktiv,
-  sobald die zugehörige Env-Var gesetzt ist. Eigenen Provider ergänzen =
-  einen `ProviderConfig`-Eintrag (Base-URL, Env-Var-Name, Modell) hinzufügen.
-- **Optionaler Schritt mit Fallback:** Ist kein Key konfiguriert, läuft alles
-  wie bisher. Mit Key lässt der Analyse-Agent die Findings zusammenfassen/
-  priorisieren und der Reporting-Agent erzeugt zusätzlich einen narrativen
-  Report-Text-Entwurf. Das Human-Oversight-Gate bleibt unangetastet.
-
-Status prüfen (zeigt nie den Key, nur ja/nein + Base-URL + Modell):
-
-```
-python -m antbb llm status
-```
-
-Per Web: `GET /api/llm/status`.
-
-Provider umschalten: `ANTBB_LLM_PROVIDER=openai` (Env-Var).
+- **LLMs sind nur austauschbare Denk-/Text-Bausteine.** Sie fassen Findings
+  zusammen, priorisieren oder formulieren Report-Narrative – mehr nicht.
+- **Keys werden AUSSCHLIESSLICH aus Umgebungsvariablen gelesen** und niemals
+  geloggt, geechot, in die DB oder in Reports geschrieben. Es ist **kein** Key
+  und **kein** Account im Repo hinterlegt.
+- **Optionaler Schritt mit Fallback:** Ohne konfigurierten Provider läuft alles
+  wie bisher (deterministischer Fallback). Das Human-Oversight-Gate bleibt in
+  jedem Fall unangetastet.
 
 ## Multi-Provider-LLM-Router
 
@@ -214,64 +200,45 @@ Provider umschalten: `ANTBB_LLM_PROVIDER=openai` (Env-Var).
 > **ausschließlich aus dem antbb-Framework**. Die LLMs sind nur austauschbare
 > Denk-/Text-Bausteine, die der Router pro Aufgabe aufruft.
 
-### Provider & Auth-Modell (recherchiert, nichts erfunden)
+Der **Multi-Provider-LLM-Router** (`antbb/router.py`) ist eine austauschbare
+Schicht, die pro Aufgabe **ein** LLM auswählt und aufruft:
 
-| Provider | Auth | Begründung (offizielle Docs) |
-|----------|------|------------------------------|
-| **minimax** | **Key-Modus** (`MINIMAX_API_KEY`) | MiniMax dokumentiert **keinen** OAuth-2.0-Flow für API-Zugang → Bearer-API-Key. |
-| **openai** | **OAuth verfügbar** + Key-Fallback (`OPENAI_API_KEY`) | OpenAI bietet „Sign in with ChatGPT" (OAuth 2.0 Auth-Code + PKCE, `auth.openai.com`) für berechtigte Dritt-/Open-Source-Apps; Standard-API-Zugang bleibt API-Key. Quelle: developers.openai.com/siwc. |
-| **kimi** | **Login-/Plan-Modus** (kein Key angelegt) | Moonshot/Kimi **Open Platform = API-Key** (kein Auth-Code-OAuth für API). Nur das separate Produkt „Kimi Code" hat Device-Code-OAuth (managed service). Quelle: platform.kimi.ai/docs. Es wird **keine** `KIMI_API_KEY`-Env-Var angelegt, bis der Nutzer einen Key nennt. |
-| **ollama** | **keine Auth** (lokal) | Lokaler Dienst `http://localhost:11434`, natives `/api/chat`. Nicht erreichbar → sauberer Fehler, kein Crash. |
+- Kleine/schnelle Arbeiter-Schritte → günstiges/schnelles Modell.
+- Entscheidungs-/komplexe Aufgaben (tiefe Analyse, Report-Narrativ) → stärkeres
+  Modell.
+- Bei kritischen oder mehrdeutigen Entscheidungen fragt der Router den Nutzer
+  (`UserQuery`), statt still selbst zu wählen.
 
-**OAuth-Baustein (`antbb/oauth.py`):** generische `OAuthProvider`-Klasse
-(authorize/token/refresh, optional PKCE) + **Fernet-verschlüsselter Token-Store**
-(`data/oauth_tokens.enc`, Key in `data/oauth.key`, Mode 600). Tokens werden nie
-geloggt/angezeigt. Redirect-Handler-Endpunkte in der Web-App:
-`/auth/<provider>/login` und `/auth/<provider>/callback`. Wo ein Provider keinen
-dokumentierten OAuth-Flow hat, verweigert der Login sauber (HTTP 400) und es gilt
-der Key-/Login-Modus. **Es werden keine OAuth-Endpunkte, Client-IDs oder Scopes
-erfunden** – die URLs kommen aus `config/default.yaml`.
+antbb **unterstützt mehrere austauschbare LLM-Provider** (Cloud-APIs per Key
+oder lokale Modelle über eine einheitliche `chat()`-Adapter-Schnittstelle).
+**Welche Provider konkret genutzt werden, konfiguriert jede Installation selbst
+über Umgebungsvariablen** – nichts davon ist im Repo hinterlegt. Nur Provider,
+für die zur Laufzeit ein Key gesetzt ist (bzw. bei einem lokalen Dienst dieser
+erreichbar ist), werden als „verfügbar" gelistet; fehlt der Key/Dienst, wird der
+Provider sauber übersprungen (kein Crash).
 
-### Router (`antbb/router.py`)
+Provider-Status in der Oberfläche (zeigt **nie** Key-/Token-Werte):
 
-`route(task_type, complexity, ask_user=None) -> RouteDecision(provider, model, tier, …)`
-entscheidet pro Aufgabe über **Provider UND Modell** und berücksichtigt nur
-verfügbare/authentifizierte Provider (nicht konfigurierte werden übersprungen):
-
-- Kleine Arbeiter-Schritte / niedrige Komplexität → **schnell/günstig**
-  (bevorzugt lokales Ollama, sonst MiniMax-Flash). Präferenz: `ollama, minimax, kimi, openai`.
-- Entscheidungs-/komplexe Aufgaben (Angriffsplan, Priorisierung, tiefe Analyse,
-  Report-Narrativ) → **stark**. Präferenz: `openai, kimi, minimax` (M3).
-
-Schwellen in `config/default.yaml` → `llm.router` (`critical_task_types`,
-`complexity_threshold`). Die Basis-Defaults (Königin=M3, schnelle Schritte=Flash)
-bleiben über `select_model()` erhalten.
-
-### Nutzer-Rückfrage bei kritischen Entscheidungen
-
-Bei kritischen Aufgabentypen oder mehrdeutiger Provider-Wahl entscheidet die
-Königin **nicht** selbst, sondern löst eine `UserQuery` (Frage + Optionen) aus:
-- **Web:** Auswahl-Prompt (Provider-Status-Seite/Hook).
-- **CLI:** `router.cli_ask()` fragt im Terminal.
-- **Headless/Test:** `router.headless_ask()` nimmt automatisch die Default-Option.
-
-Ohne Hook liefert `route()` `needs_user=True` samt `query` zurück, statt still zu entscheiden.
-
-### Provider-Status in der Oberfläche
-
-- **CLI:** `python -m antbb llm status` (Status pro Provider, nie Key-/Token-Werte).
+- **CLI:** `python -m antbb llm status`
 - **Web:** `GET /api/llm/status` (JSON) und HTML-Ansicht unter **`/providers`**.
-  Statuswerte: „nicht konfiguriert" / „bereit zur Anmeldung" / „authentifiziert" /
-  „Key-Modus (Fallback)" / „lokal, keine Auth" (Ollama) / „nicht erreichbar".
 
-## TODO / Offen
+## Umgesetzt / Roadmap
 
-- Echter WebSocket-Live-Feed (derzeit Polling via `/api/feed`).
-- CVSS-Rechner (derzeit manuelle Score/Vektor-Eingabe).
-- Authentifizierung/Multi-User für den Webserver.
-- Opt-in-Modul für *echte* ungefährliche Checks (z. B. TLS/Header) nur gegen
-  bestätigte eigene Assets.
-- Persistente Run-Historie/Export-Index in der UI.
+Umgesetzt:
+
+- ✅ Echter WebSocket-Live-Feed (`/ws/feed`) mit automatischem Fallback auf das
+  `/api/feed`-Polling.
+- ✅ Interaktiver CVSS-v3.1-Rechner (`antbb/cvss.py`, `GET /api/cvss`).
+- ✅ Optionale Authentifizierung/Multi-User für den Webserver (`ANTBB_AUTH=1`,
+  Rollen admin/viewer; Standard: Einzelnutzer-Betrieb ohne Login).
+- ✅ Opt-in-Modul für *echte* ungefährliche Checks (TLS/HTTP-Security-Header)
+  nur gegen ausdrücklich bestätigte **eigene** Assets (default-deny,
+  oversight-gated).
+- ✅ Persistente Run-Historie + Export-Index in der UI (`/history`).
+
+Offen / Ideen:
+
+- Weitere LLM-Adapter und Feinschliff der Router-Heuristiken.
 
 ## On-Device GUI (ohne CLI-Copy-Paste)
 
@@ -309,9 +276,9 @@ Die Autonomie ist on-device: App startet lokal, GUI + Königin erledigen den Res
 
 Siehe **`INSTALL.md`** und **`antbb.env.example`**.
 
-Kurz: `MINIMAX_API_KEY` (Host `api.minimax.io`) und `CLOUDFLARE_TUNNEL_TOKEN`
+Kurz: Provider-API-Keys und der `CLOUDFLARE_TUNNEL_TOKEN`
 werden **ausschließlich zur Laufzeit** als Umgebungsvariablen gesetzt und
-**niemals** in ZIP/Repo/APK/Logs eingebettet. Keine `KIMI_API_KEY` ohne vorliegenden Key.
+**niemals** in ZIP/Repo/APK/Logs eingebettet. Es wird **keine** leere Key-Variable angelegt.
 
 
 ## System-Bootstrap durch den Installer

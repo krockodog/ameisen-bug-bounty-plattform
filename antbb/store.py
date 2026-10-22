@@ -197,6 +197,77 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at REAL NOT NULL
 );
 
+-- ---- Auth / Multi-User (optional, via ANTBB_AUTH=1) ----------------------
+-- Passwoerter werden NUR als gesalzener PBKDF2-HMAC-Hash gespeichert, NIE im
+-- Klartext. pw_hash/pw_salt sind Hex-Strings; kein Klartext, kein Log.
+CREATE TABLE IF NOT EXISTS users (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    username   TEXT UNIQUE NOT NULL,
+    pw_hash    TEXT NOT NULL,             -- PBKDF2-HMAC-SHA256 (hex)
+    pw_salt    TEXT NOT NULL,             -- zufaelliges Salz (hex)
+    pw_iter    INTEGER NOT NULL DEFAULT 240000,
+    role       TEXT NOT NULL DEFAULT 'viewer',  -- admin | viewer
+    active      INTEGER NOT NULL DEFAULT 1,
+    created_at REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+    token      TEXT PRIMARY KEY,          -- zufaelliges Token (nie geloggt)
+    username   TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'viewer',
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL
+);
+
+-- ---- Opt-in: eigene Assets fuer ungefaehrliche TLS/Header-Checks ----------
+-- Default-deny: ein Check laeuft NUR gegen Assets, die hier als EIGEN bestaetigt
+-- sind (confirmed_owner=1). Kein aktiver/offensiver Payload.
+CREATE TABLE IF NOT EXISTS owned_assets (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    label           TEXT DEFAULT '',
+    host            TEXT NOT NULL,         -- Hostname/Domain (ohne Schema)
+    port            INTEGER NOT NULL DEFAULT 443,
+    confirmed_owner INTEGER NOT NULL DEFAULT 0,  -- 1 = Besitz ausdruecklich bestaetigt
+    confirmed_by    TEXT DEFAULT '',
+    note            TEXT DEFAULT '',
+    created_at      REAL NOT NULL,
+    UNIQUE(host, port)
+);
+
+CREATE TABLE IF NOT EXISTS asset_check_runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    asset_id    INTEGER NOT NULL,
+    host        TEXT NOT NULL,
+    port        INTEGER NOT NULL DEFAULT 443,
+    kind        TEXT NOT NULL,             -- tls | headers
+    ok          INTEGER NOT NULL DEFAULT 0,
+    summary     TEXT DEFAULT '',
+    result      TEXT NOT NULL DEFAULT '{}',-- JSON (keine Secrets)
+    created_at  REAL NOT NULL,
+    FOREIGN KEY (asset_id) REFERENCES owned_assets(id) ON DELETE CASCADE
+);
+
+-- ---- Persistente Run-Historie (UI) ---------------------------------------
+-- Jeder abgeschlossene/abgebrochene Lauf wird mit Metadaten festgehalten.
+CREATE TABLE IF NOT EXISTS run_history (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id        TEXT,
+    target_id     INTEGER,
+    target_name   TEXT DEFAULT '',
+    mode          TEXT DEFAULT 'defensive', -- defensive | active | fuzz | offensive
+    active        INTEGER NOT NULL DEFAULT 0,
+    fuzz          INTEGER NOT NULL DEFAULT 0,
+    offensive     INTEGER NOT NULL DEFAULT 0,
+    status        TEXT DEFAULT 'done',      -- done | error
+    finding_count INTEGER NOT NULL DEFAULT 0,
+    severity      TEXT NOT NULL DEFAULT '{}',-- JSON Verteilung
+    error         TEXT DEFAULT '',
+    started_at    REAL,
+    finished_at   REAL,
+    duration      REAL,
+    created_at    REAL NOT NULL
+);
+
 """
 
 
@@ -445,6 +516,167 @@ class Store:
             (key, str(value), _now()),
         )
         self._conn.commit()
+
+    # ---------------- Auth / Multi-User (optional) ----------------
+    def count_users(self) -> int:
+        r = self._conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()
+        return int(r["c"]) if r else 0
+
+    def get_user(self, username: str):
+        return self._conn.execute(
+            "SELECT * FROM users WHERE username=?", (username,)).fetchone()
+
+    def list_users(self):
+        return self._conn.execute(
+            "SELECT id, username, role, active, created_at FROM users "
+            "ORDER BY created_at").fetchall()
+
+    def create_user(self, username: str, pw_hash: str, pw_salt: str,
+                    role: str = "viewer", pw_iter: int = 240000) -> int:
+        role = role if role in ("admin", "viewer") else "viewer"
+        cur = self._conn.execute(
+            "INSERT INTO users (username, pw_hash, pw_salt, pw_iter, role, "
+            "active, created_at) VALUES (?,?,?,?,?,1,?)",
+            (username, pw_hash, pw_salt, int(pw_iter), role, _now()))
+        self._conn.commit()
+        return cur.lastrowid
+
+    def update_user_password(self, username: str, pw_hash: str, pw_salt: str,
+                             pw_iter: int = 240000) -> None:
+        self._conn.execute(
+            "UPDATE users SET pw_hash=?, pw_salt=?, pw_iter=? WHERE username=?",
+            (pw_hash, pw_salt, int(pw_iter), username))
+        self._conn.commit()
+
+    def set_user_role(self, username: str, role: str) -> None:
+        role = role if role in ("admin", "viewer") else "viewer"
+        self._conn.execute("UPDATE users SET role=? WHERE username=?",
+                           (role, username))
+        self._conn.commit()
+
+    def delete_user(self, username: str) -> None:
+        self._conn.execute("DELETE FROM users WHERE username=?", (username,))
+        self._conn.commit()
+
+    # ---- Sessions (Token nie geloggt) ----
+    def create_session(self, token: str, username: str, role: str,
+                       ttl_seconds: float = 86400 * 7) -> None:
+        now = _now()
+        self._conn.execute(
+            "INSERT OR REPLACE INTO sessions (token, username, role, created_at, "
+            "expires_at) VALUES (?,?,?,?,?)",
+            (token, username, role, now, now + ttl_seconds))
+        self._conn.commit()
+
+    def get_session(self, token: str):
+        if not token:
+            return None
+        row = self._conn.execute(
+            "SELECT * FROM sessions WHERE token=?", (token,)).fetchone()
+        if not row:
+            return None
+        if row["expires_at"] < _now():
+            self.delete_session(token)
+            return None
+        return row
+
+    def delete_session(self, token: str) -> None:
+        self._conn.execute("DELETE FROM sessions WHERE token=?", (token,))
+        self._conn.commit()
+
+    def purge_expired_sessions(self) -> int:
+        cur = self._conn.execute(
+            "DELETE FROM sessions WHERE expires_at < ?", (_now(),))
+        self._conn.commit()
+        return cur.rowcount or 0
+
+    # ---------------- Opt-in eigene Assets (TLS/Header-Checks) ----------------
+    def add_owned_asset(self, host: str, port: int = 443, label: str = "",
+                        confirmed_owner: bool = False, confirmed_by: str = "",
+                        note: str = "") -> int:
+        cur = self._conn.execute(
+            "INSERT INTO owned_assets (label, host, port, confirmed_owner, "
+            "confirmed_by, note, created_at) VALUES (?,?,?,?,?,?,?) "
+            "ON CONFLICT(host, port) DO UPDATE SET label=excluded.label, "
+            "confirmed_owner=excluded.confirmed_owner, "
+            "confirmed_by=excluded.confirmed_by, note=excluded.note",
+            (label, host, int(port), 1 if confirmed_owner else 0,
+             confirmed_by, note, _now()))
+        self._conn.commit()
+        row = self._conn.execute(
+            "SELECT id FROM owned_assets WHERE host=? AND port=?",
+            (host, int(port))).fetchone()
+        return int(row["id"]) if row else int(cur.lastrowid)
+
+    def get_owned_asset(self, asset_id: int):
+        return self._conn.execute(
+            "SELECT * FROM owned_assets WHERE id=?", (int(asset_id),)).fetchone()
+
+    def list_owned_assets(self):
+        return self._conn.execute(
+            "SELECT * FROM owned_assets ORDER BY created_at DESC").fetchall()
+
+    def set_owned_asset_confirmed(self, asset_id: int, confirmed: bool,
+                                  confirmed_by: str = "") -> None:
+        self._conn.execute(
+            "UPDATE owned_assets SET confirmed_owner=?, confirmed_by=? WHERE id=?",
+            (1 if confirmed else 0, confirmed_by, int(asset_id)))
+        self._conn.commit()
+
+    def delete_owned_asset(self, asset_id: int) -> None:
+        self._conn.execute("DELETE FROM owned_assets WHERE id=?", (int(asset_id),))
+        self._conn.commit()
+
+    def add_asset_check_run(self, asset_id: int, host: str, port: int, kind: str,
+                            ok: bool, summary: str, result: dict) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO asset_check_runs (asset_id, host, port, kind, ok, "
+            "summary, result, created_at) VALUES (?,?,?,?,?,?,?,?)",
+            (int(asset_id), host, int(port), kind, 1 if ok else 0, summary,
+             json.dumps(result or {}), _now()))
+        self._conn.commit()
+        return cur.lastrowid
+
+    def list_asset_check_runs(self, asset_id: Optional[int] = None, limit: int = 50):
+        if asset_id is not None:
+            return self._conn.execute(
+                "SELECT * FROM asset_check_runs WHERE asset_id=? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (int(asset_id), int(limit))).fetchall()
+        return self._conn.execute(
+            "SELECT * FROM asset_check_runs ORDER BY created_at DESC LIMIT ?",
+            (int(limit),)).fetchall()
+
+    # ---------------- Run-Historie (UI) ----------------
+    def add_run_history(self, run_id: Optional[str], target_id: Optional[int],
+                        target_name: str = "", mode: str = "defensive",
+                        active: bool = False, fuzz: bool = False,
+                        offensive: bool = False, status: str = "done",
+                        finding_count: int = 0, severity: Optional[dict] = None,
+                        error: str = "", started_at: Optional[float] = None,
+                        finished_at: Optional[float] = None,
+                        duration: Optional[float] = None) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO run_history (run_id, target_id, target_name, mode, "
+            "active, fuzz, offensive, status, finding_count, severity, error, "
+            "started_at, finished_at, duration, created_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (run_id, target_id, target_name, mode, 1 if active else 0,
+             1 if fuzz else 0, 1 if offensive else 0, status, int(finding_count),
+             json.dumps(severity or {}), error, started_at, finished_at,
+             duration, _now()))
+        self._conn.commit()
+        return cur.lastrowid
+
+    def list_run_history(self, target_id: Optional[int] = None, limit: int = 200):
+        if target_id is not None:
+            return self._conn.execute(
+                "SELECT * FROM run_history WHERE target_id=? "
+                "ORDER BY created_at DESC LIMIT ?",
+                (int(target_id), int(limit))).fetchall()
+        return self._conn.execute(
+            "SELECT * FROM run_history ORDER BY created_at DESC LIMIT ?",
+            (int(limit),)).fetchall()
 
     # ---------------- Report-Nachträge (Addenda) ----------------
     def add_addendum(self, report_id: int, text: str, author: str = "") -> int:

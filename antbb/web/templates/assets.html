@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Eigene Assets · Checks · antbb{% endblock %}
+{% block content %}
+<p><a href="/">← zurück</a></p>
+<h2>🔒 Opt-in-Checks: TLS &amp; Security-Header <small>nur eigene, bestätigte Assets</small></h2>
+<pre class="notice">Default-deny: Es laufen NUR rein lesende, ungefährliche Checks (TLS-Zertifikat/
+Protokoll/Cipher, HTTP-Security-Header) – ausschließlich gegen Assets, die du
+ausdrücklich als EIGEN bestätigt hast. Keine aktiven/offensiven Payloads.</pre>
+
+<section class="card">
+  <h3>Eigenes Asset hinzufügen</h3>
+  <form method="post" action="/assets/add" class="inline">
+    <input name="host" required placeholder="meine-domain.de">
+    <input name="port" type="number" value="443" style="width:6rem">
+    <input name="label" placeholder="Bezeichnung (optional)">
+    <label style="font-weight:bold"><input type="checkbox" name="confirm_owner" value="on">
+      ✅ Ich bestätige, dass dies mein eigenes Asset ist / ich autorisiert bin</label>
+    <button type="submit">+ hinzufügen</button>
+  </form>
+  <p class="hint">Ohne Besitz-Bestätigung bleibt das Asset gesperrt (default-deny).</p>
+</section>
+
+<section class="card">
+  <h3>Assets ({{ assets|length }})</h3>
+  <table>
+    <thead><tr><th>ID</th><th>Host:Port</th><th>Label</th><th>Eigen bestätigt</th><th>Aktionen</th></tr></thead>
+    <tbody>
+    {% for a in assets %}
+      <tr>
+        <td>{{ a.id }}</td>
+        <td><code>{{ a.host }}:{{ a.port }}</code></td>
+        <td>{{ a.label }}</td>
+        <td>{% if a.confirmed_owner %}<span class="ok">✔ {{ a.confirmed_by }}</span>
+            {% else %}<span class="blocked">✘ nicht bestätigt</span>{% endif %}</td>
+        <td>
+          {% if not a.confirmed_owner %}
+          <form method="post" action="/assets/{{ a.id }}/confirm" style="display:inline">
+            <button type="submit">bestätigen</button></form>
+          {% endif %}
+          <form method="post" action="/assets/{{ a.id }}/check" style="display:inline">
+            <input type="hidden" name="kind" value="tls"><button type="submit">TLS-Check</button></form>
+          <form method="post" action="/assets/{{ a.id }}/check" style="display:inline">
+            <input type="hidden" name="kind" value="headers"><button type="submit">Header-Check</button></form>
+          <form method="post" action="/assets/{{ a.id }}/delete" style="display:inline">
+            <button type="submit" class="btn-danger">entfernen</button></form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="5">Noch keine eigenen Assets hinterlegt.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<section class="card">
+  <h3>Letzte Check-Ergebnisse</h3>
+  <ul>
+  {% for c in checks %}
+    <li>[{{ c.kind }}] <code>{{ c.host }}:{{ c.port }}</code> —
+      {% if c.ok %}<span class="ok">ok</span>{% else %}<span class="blocked">fehlgeschlagen</span>{% endif %}
+      · {{ c.summary }}</li>
+  {% else %}
+    <li>Noch keine Checks ausgeführt.</li>
+  {% endfor %}
+  </ul>
+</section>
+{% endblock %}
