@@ -328,6 +328,26 @@ CREATE TABLE IF NOT EXISTS blue_job_runs (
     FOREIGN KEY(job_id) REFERENCES blue_jobs(id) ON DELETE CASCADE
 );
 
+-- ---- Blue Queen: permanenter Attack-Log (append-only) -------------------
+CREATE TABLE IF NOT EXISTS attack_events (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_type    TEXT NOT NULL,
+    source        TEXT DEFAULT '',
+    action        TEXT DEFAULT '',
+    countermeasure TEXT DEFAULT '',
+    outcome       TEXT DEFAULT '',
+    before_json   TEXT NOT NULL DEFAULT '{}',
+    after_json    TEXT NOT NULL DEFAULT '{}',
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    run_id        TEXT DEFAULT '',
+    target_id     INTEGER,
+    severity      TEXT DEFAULT 'info',
+    ts            REAL NOT NULL,
+    created_at    REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_attack_events_ts ON attack_events(ts);
+CREATE INDEX IF NOT EXISTS idx_attack_events_run ON attack_events(run_id);
+
 """
 
 
@@ -1351,3 +1371,56 @@ class Store:
             "SELECT * FROM blue_job_runs ORDER BY id DESC LIMIT ?",
             (int(limit),)).fetchall())
 
+
+
+    # ---------------- Attack-Log (append-only) ----------------
+    def append_attack_event(self, event: dict) -> int:
+        """Append-only Persistenz. Kein Truncate/Delete über diese API."""
+        now = _now()
+        cur = self._conn.execute(
+            "INSERT INTO attack_events(event_type, source, action, countermeasure, "
+            "outcome, before_json, after_json, evidence_json, run_id, target_id, "
+            "severity, ts, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (event.get("event_type") or "info",
+             event.get("source") or "",
+             event.get("action") or "",
+             event.get("countermeasure") or "",
+             event.get("outcome") or "",
+             json.dumps(event.get("before") or {}),
+             json.dumps(event.get("after") or {}),
+             json.dumps(event.get("evidence") or {}),
+             event.get("run_id") or "",
+             event.get("target_id"),
+             event.get("severity") or "info",
+             float(event.get("ts") or now),
+             now))
+        self._conn.commit()
+        return int(cur.lastrowid)
+
+    def list_attack_events(self, run_id=None, event_type=None,
+                           limit: int = 200, since=None) -> list:
+        q = "SELECT * FROM attack_events WHERE 1=1"
+        args = []
+        if run_id:
+            q += " AND run_id=?"; args.append(run_id)
+        if event_type:
+            q += " AND event_type=?"; args.append(event_type)
+        if since is not None:
+            q += " AND ts>=?"; args.append(float(since))
+        q += " ORDER BY id DESC LIMIT ?"; args.append(int(limit))
+        rows = list(self._conn.execute(q, args).fetchall())
+        out = []
+        for r in rows:
+            d = dict(r)
+            for k, jk in (("before", "before_json"), ("after", "after_json"),
+                          ("evidence", "evidence_json")):
+                try:
+                    d[k] = json.loads(d.get(jk) or "{}")
+                except Exception:
+                    d[k] = {}
+            out.append(d)
+        return out
+
+    def count_attack_events(self) -> int:
+        row = self._conn.execute("SELECT COUNT(*) AS c FROM attack_events").fetchone()
+        return int(row["c"] if row else 0)

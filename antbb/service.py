@@ -455,10 +455,12 @@ class AntBBService:
         survey["enabled"] = ws.wifi_enabled()
         return survey
 
-    # ---------------- WLAN-Offensiv (AUTORISIERT: Engagement-Gate) ----------------
+    def _not_in_blue_queen(self, what: str) -> None:
+        raise RuntimeError(
+            f"{what} ist in dieser Blue-Queen-Ausgabe nicht enthalten.")
+
     def _wifi_off(self, dry_run: bool = False):
-        from . import wlan_offensive as wo
-        return wo.WifiOffensive(self.store, logger=self.logger, dry_run=dry_run)
+        self._not_in_blue_queen("WLAN-Offensiv")
 
     def wlan_engagement_create(self, name: str, bssids=None, ssids=None,
                                start_ts: Optional[float] = None,
@@ -467,97 +469,54 @@ class AntBBService:
                                client_mac: str = "", location: str = "",
                                target_id: Optional[int] = None,
                                oversight: bool = False) -> int:
-        """Legt einen WLAN-Autorisierungs-Record an (Allowlist + Zeitfenster)."""
-        import time as _t
-        if start_ts is None:
-            start_ts = _t.time()
-        if end_ts is None:
-            end_ts = start_ts + float(duration_hours) * 3600.0
-        return self.store.add_wlan_engagement(
-            name, bssids or [], ssids or [], start_ts, end_ts,
-            client_mac=client_mac, location=location, target_id=target_id,
-            oversight=oversight)
+        self._not_in_blue_queen("WLAN-Engagement")
 
     def wlan_engagement_list(self, include_revoked: bool = True) -> list:
-        from . import wlan_offensive as wo
-        return [wo._row_to_engagement(r)
-                for r in self.store.list_wlan_engagements(include_revoked)]
+        self._not_in_blue_queen("WLAN-Engagement")
 
     def wlan_engagement_get(self, engagement_id: int):
-        from . import wlan_offensive as wo
-        row = self.store.get_wlan_engagement(engagement_id)
-        return wo._row_to_engagement(row) if row else None
+        self._not_in_blue_queen("WLAN-Engagement")
 
     def wlan_engagement_oversight(self, engagement_id: int, confirmed: bool) -> None:
-        self.store.set_wlan_engagement_oversight(engagement_id, confirmed)
+        self._not_in_blue_queen("WLAN-Engagement")
 
     def wlan_engagement_revoke(self, engagement_id: int) -> None:
-        self.store.revoke_wlan_engagement(engagement_id)
+        self._not_in_blue_queen("WLAN-Engagement")
 
     def wlan_authorize_check(self, bssid: str = "", ssid: str = "",
                              client_mac: str = "") -> dict:
-        from . import wlan_offensive as wo
-        g = wo.authorize(self.store, bssid=bssid, ssid=ssid, client_mac=client_mac)
-        return {"allowed": g.allowed, "reason": g.reason,
-                "engagement_id": g.engagement_id}
+        self._not_in_blue_queen("WLAN-Offensiv")
 
     def wlan_offensive_run(self, action: str, *, bssid: str = "", ssid: str = "",
                            client_mac: str = "", channel=None, seconds: int = 60,
                            packets: int = 10, capture_path: str = "",
                            wordlist: Optional[str] = None,
                            dry_run: bool = False) -> dict:
-        """Führt EINE offensive Aktion durch das Gate (default-deny, honest-empty)."""
-        off = self._wifi_off(dry_run=dry_run)
-        if action == "handshake-capture":
-            r = off.handshake_capture(bssid=bssid, ssid=ssid, channel=channel,
-                                      seconds=seconds)
-        elif action == "targeted-deauth":
-            r = off.targeted_deauth(bssid=bssid, ssid=ssid, client_mac=client_mac,
-                                    packets=packets, seconds=seconds)
-        elif action == "offline-crack":
-            r = off.offline_crack(capture_path=capture_path, bssid=bssid,
-                                  ssid=ssid, wordlist=wordlist)
-        elif action == "evil-twin-demo":
-            r = off.evil_twin_demo(ssid=ssid, bssid=bssid, seconds=seconds)
-        else:
-            raise ValueError(f"Unbekannte WLAN-Offensiv-Aktion: {action}")
-        return r.to_dict()
+        self._not_in_blue_queen("WLAN-Offensiv")
 
     def wlan_credentials_list(self, engagement_id: Optional[int] = None) -> list:
-        return [dict(r) for r in self.store.list_wlan_credentials(engagement_id)]
+        self._not_in_blue_queen("WLAN-Offensiv")
 
     def wlan_credentials_purge(self, engagement_id: Optional[int] = None) -> int:
-        return self._wifi_off().purge(engagement_id)
+        self._not_in_blue_queen("WLAN-Offensiv")
 
     def wlan_offensive_tool_status(self) -> dict:
-        from . import wlan_offensive as wo
-        return {"tools": wo.action_tool_status(), "missing": wo.missing_tools(),
-                "enabled": wo.wifi_offensive_enabled()}
+        self._not_in_blue_queen("WLAN-Offensiv")
 
-    # ---------------- WLAN Airgorah + Königin-Voll-Scan ----------------
     def wlan_airgorah_status(self, iface: Optional[str] = "") -> dict:
-        """Airgorah-Workflow-Status (Tools/Monitor/Rechte) – kein Angriff."""
-        from . import wlan_airgorah as wa
-        return wa.airgorah_status(preferred_iface=iface or "")
+        self._not_in_blue_queen("WLAN-Airgorah")
 
     def wlan_clients(self, iface: str = "", bssid: str = "") -> dict:
-        """Client-Liste (honest-empty ohne Monitor/airodump); startet nichts Scharfes."""
-        from . import wlan_airgorah as wa
-        return wa.list_clients_honest_empty(iface=iface, bssid=bssid)
+        self._not_in_blue_queen("WLAN-Airgorah")
 
     def wlan_full_scan_checks(self) -> list:
-        from . import wlan_airgorah as wa
-        return list(wa.FULL_SCAN_CHECKS)
+        self._not_in_blue_queen("WLAN-Airgorah")
 
     def wlan_full_scan(self, *, iface: Optional[str] = None, checks=None,
                        oversight_ack: bool = False,
                        target_id: Optional[int] = None,
                        emit: Optional[Callable[[dict], None]] = None) -> dict:
-        """Königin-Ein-Klick: alle (oder gewählte) DEFENSIVEN WLAN-Checks."""
-        from . import wlan_airgorah as wa
-        return wa.run_full_scan(
-            iface=iface, checks=checks, oversight_ack=oversight_ack,
-            target_id=target_id, store=self.store, logger=self.logger, emit=emit)
+        self._not_in_blue_queen("WLAN-Airgorah")
 
     # ---------------- Soldaten (Skills/Playbooks/Overrides/Mems) ----------------
     def soldier_detail(self, name: str, target_id: Optional[int] = None) -> dict:
@@ -827,10 +786,22 @@ class AntBBService:
         """Blue-Soldaten aus der Registry (colony=blue)."""
         reg = self.capabilities(rebuild=True)
         blues = [s for s in reg.get("soldiers", []) if s.get("colony") == "blue"]
+        import os as _os
+        pb_dir = _os.path.join(_os.path.dirname(__file__), "playbooks", "blue")
+        try:
+            pb_md = len([f for f in _os.listdir(pb_dir) if f.endswith(".md")])
+        except Exception:
+            pb_md = 0
+        pb_n = sum(len(s.get("playbooks") or []) for s in blues)
+        task_n = sum(((s.get("skill") or {}).get("task_count") or 0) for s in blues)
         return {
             "blue_phases": reg.get("blue_phases", []),
             "soldier_count": len(blues),
+            "playbook_count": pb_n,
+            "task_count": task_n,
+            "playbook_md_count": pb_md,
             "soldiers": blues,
+            "soldier_ids": [s.get("name") for s in blues],
             "splunk": __import__("antbb.splunk", fromlist=["status"]).status(),
         }
 
@@ -838,14 +809,36 @@ class AntBBService:
                  phases: Optional[tuple] = None, apply_fixes: bool = False,
                  oversight_ack: Optional[bool] = None,
                  params: Optional[dict] = None,
-                 emit: Optional[Callable[[dict], None]] = None):
-        """Startet die Verteidigungs-Kolonie (Blue Queen). Default: read-only."""
+                 emit: Optional[Callable[[dict], None]] = None,
+                 use_llm: Optional[bool] = None):
+        """Startet die Verteidigungs-Kolonie (Blue Queen). Default: read-only.
+
+        Der Provider-Router hängt an der Königin, sobald ein Provider zur
+        Laufzeit konfiguriert ist. ``ANTBB_NO_LLM=1`` schaltet das ab. Ohne
+        Provider läuft der Lauf trotzdem (kein Key im Repo).
+        """
         from .blue_queen import BlueQueen, PHASES as BP
-        queen = BlueQueen(self.store, logger=self.logger, emit=emit, use_llm=False)
-        return queen.run_colony_sync(
+        if use_llm is None:
+            use_llm = os.environ.get("ANTBB_NO_LLM", "").strip().lower() not in (
+                "1", "true", "yes", "on",
+            )
+        queen = BlueQueen(self.store, logger=self.logger, emit=emit, use_llm=use_llm)
+        result = queen.run_colony_sync(
             target_id=target_id, phases=phases or BP,
             apply_fixes=apply_fixes, oversight_ack=oversight_ack,
             params=params)
+        try:
+            self.store.add_run_history(
+                run_id=result.run_id, target_id=target_id,
+                target_name=result.target_name, mode="blue",
+                active=bool(apply_fixes), fuzz=False, offensive=False,
+                status="done", finding_count=len(result.findings),
+                severity=result.by_severity(),
+                started_at=result.started_at, finished_at=result.finished_at,
+                duration=result.duration)
+        except Exception:
+            self.logger.exception("Blue-Lauf nicht in der Historie gespeichert")
+        return result
 
     def blue_jobs_list(self, enabled_only: bool = False):
         from .jobs import JobScheduler
@@ -886,4 +879,24 @@ class AntBBService:
                          "fixed": m.fixed, "aliases": m.aliases}
                         for m in rep.matches],
         }
+
+    def attack_log_list(self, limit: int = 50, run_id: str = "",
+                        event_type: str = ""):
+        from .attack_log import AttackLog
+        alog = AttackLog(self.store)
+        return {
+            "events": alog.list(run_id=run_id, event_type=event_type, limit=limit),
+            "total": alog.count(),
+            "summary": alog.summary(),
+        }
+
+    def watcher_run(self, events=None, active: bool = False,
+                    apply_protect: bool = False, kinds=None,
+                    run_id: str = "", target_id=None) -> dict:
+        from . import watcher as _w
+        report = _w.run_watch(
+            events or [], active=active, apply_protect=apply_protect,
+            kinds=kinds, store=self.store, run_id=run_id or "",
+            target_id=target_id)
+        return report.to_dict()
 

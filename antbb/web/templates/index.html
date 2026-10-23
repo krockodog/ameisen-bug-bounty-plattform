@@ -2,35 +2,12 @@
 {% block body_class %}home{% endblock %}
 {% block content %}
 <section class="intro-card">
-  <h2>🐜 Willkommen beim Ameisen-Schwarm</h2>
+  <h2>Scope und Human Oversight</h2>
   <p>
-    antbb ist deine <strong>lokale, autorisierte Pentest-Plattform</strong>: Eine <strong>Königin</strong>
-    (die Orchestratorin) steuert einen Schwarm aus 16 spezialisierten <strong>Ameisen-Soldaten</strong> –
-    je einer für Recon, Web, Netzwerk, Auth, OSINT, WLAN, Cloud, Exploit, Report und mehr.
-    Wie in einem echten Ameisenstaat erledigt jede Ameise ihre Aufgabe, und gemeinsam ergibt der
-    Schwarm ein vollständiges Bild der Sicherheitslage – immer nur für Ziele, für die du die
-    Erlaubnis hast.
-  </p>
-
-  <div class="intro-modes">
-    <div class="intro-mode def">
-      <strong>🛡️ Defensiv</strong>
-      Nur lesende Beobachtung. Der Schwarm sammelt und bewertet, ohne aktiv einzugreifen –
-      sicher für den Alltag.
-    </div>
-    <div class="intro-mode off">
-      <strong>⚔️ Offensiv</strong>
-      Aktive Verifikation von Schwachstellen – erst wenn <em>Scope-Allowlist</em>,
-      <em>Oversight-Häkchen</em> und der <em>Rechtshinweis (§ 202a–c StGB)</em> vorliegen.
-    </div>
-  </div>
-
-  <p class="intro-guards">
-    <strong>Feste Leitplanken:</strong>
-    Scope ist <code>default-deny</code> – getestet wird nur, was ausdrücklich erlaubt ist, der Rest
-    wird blockiert und protokolliert. Nichts Destruktives (keine Brute-Force, keine Lasterzeugung).
-    Und ein <strong>Proof-Gate</strong>: Ein Befund gilt erst als <span class="ok">VERIFIZIERT</span>,
-    wenn er aktiv nachgewiesen wurde – alles andere bleibt „Verdacht" oder „zu bestätigen".
+    Die Kolonie selbst startest du unter <a href="/blue">Blue Queen</a>.
+    Hier lege ich Ziele an und entscheide, was erlaubt ist. Ohne Eintrag in der
+    Allowlist bleibt ein Asset blockiert. Aktive Schritte brauchen zusätzlich
+    das Oversight-Häkchen. § 202a–c StGB und der CFAA gelten.
   </p>
 
   <div class="didyouknow" id="dyk-box">
@@ -163,7 +140,6 @@
     <a href="/trash" class="trash-link" title="Archivierte Targets (Soft-Delete)">🗑 Papierkorb{% if archived_count %} ({{ archived_count }}){% endif %}</a>
   </h2>
   <p class="hint">Alles läuft on-device über diese GUI – kein CLI-Copy-Paste nötig.
-    Offensiv nur bei Scope + Oversight (mode_policy=auto/offensive).
     Archivieren verschiebt ein Target in den Papierkorb (wiederherstellbar) –
     die Königin behält ihr gesamtes Wissen (Findings, Registry, Erinnerungen).</p>
   <table>
@@ -204,9 +180,8 @@
     <label>Beschreibung <input name="description" placeholder="optional"></label>
     <label>mode_policy
       <select name="mode_policy">
-        <option value="auto" selected>auto (Offensiv nur bei Scope+Oversight)</option>
-        <option value="defensive">defensive (nur defensiv)</option>
-        <option value="offensive">offensive (Offensiv erlaubt bei Scope+Oversight)</option>
+        <option value="defensive" selected>defensive (lesend)</option>
+        <option value="auto">auto (aktive Schritte nur mit Scope und Oversight)</option>
       </select>
     </label>
     <button type="submit">Anlegen</button>

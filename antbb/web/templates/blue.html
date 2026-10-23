@@ -1,19 +1,59 @@
 {% extends "base.html" %}
-{% block title %}Blue Queen · Verteidigungs-Kolonie · antbb{% endblock %}
+{% block title %}🛡 Blue Queen · Verteidigungs-Kolonie · antbb{% endblock %}
+{% block body_class %}blue-body{% endblock %}
 {% block content %}
-<p><a href="/">← zurück</a></p>
-<h2>🛡 Blue Queen – Verteidigungs-Kolonie
-  <small>nachhaltiger Schutz · human-oversight · scope-gebunden</small>
-</h2>
-<pre class="notice">Die Blaue Königin orchestriert die Verteidigungs-Ameisen in den Phasen
-Assess → Harden → Defend → Remediate → Verify. Standard: rein lesend /
-non-destruktiv. Aktive Fixes und Honeypot-Starts nur mit Oversight-Freigabe.
-„Nachweislich geschlossen" = Re-Check mit Vorher/Nachher-Evidence (Proof-Gate).</pre>
+<section class="blue-hero" aria-label="Blue Queen">
+  <div class="blue-hero-glow" aria-hidden="true"></div>
+  <div class="blue-hero-ants" aria-hidden="true">
+    <span class="bha bha1">🐜</span>
+    <span class="bha bha2">🐜</span>
+    <span class="bha bha3">🐜</span>
+  </div>
+  <div class="blue-hero-inner">
+    <div class="blue-crest" aria-hidden="true">🛡</div>
+    <div class="blue-hero-copy">
+      <p class="blue-kicker">Verteidigungs-Kolonie · eigenständige Ansicht</p>
+      <h2>Blue Queen <span class="blue-sub">die Blaue Königin</span></h2>
+      <p class="blue-lede">
+        Ich führe hier die Verteidigungs-Kolonie. Phasen:
+        <em>Assess → Watch → Harden → Defend → Remediate → Verify</em>.
+        Standard: rein lesend. Aktive Fixes und Honeypots nur mit Human Oversight.
+        Ist ein Provider in der Umgebung gesetzt, wählt der Router ihn für Einordnung
+        und Text. Ohne Provider laufen die Checks trotzdem.
+      </p>
+      <p class="blue-motto">„Nachweislich geschlossen" gilt erst mit Vorher/Nachher-Evidence.</p>
+    </div>
+    <div class="blue-hero-stats" id="blue-stats">
+      <div class="bstat"><b id="bst-soldiers">{{ blue_stats.soldiers }}</b><span>Soldaten</span></div>
+      <div class="bstat"><b id="bst-playbooks">{{ blue_stats.playbooks }}</b><span>Playbooks</span></div>
+      <div class="bstat"><b id="bst-tasks">{{ blue_stats.tasks }}</b><span>Aufgaben</span></div>
+      <div class="bstat"><b id="bst-jobs">{{ blue_stats.jobs }}</b><span>Jobs</span></div>
+      <div class="bstat bstat-open"><b id="bst-open">{{ blue_stats.open }}</b><span>offene Lücken</span></div>
+      <div class="bstat bstat-closed"><b id="bst-closed">{{ blue_stats.closed }}</b><span>nachweislich geschlossen</span></div>
+    </div>
+  </div>
+</section>
 
-<section class="card">
-  <h3>Kolonie starten <small>read-only Default</small></h3>
-  <form id="blue-run-form" class="inline">
-    <label>Ziel (optional)
+<nav class="blue-jump" aria-label="Blue Queen Abschnitte">
+  <a href="#blue-phases">Phasen</a>
+  <a href="#blue-launch">Kolonie starten</a>
+  <a href="#soldier-section">Soldaten &amp; Playbooks</a>
+  <a href="#blue-jobs">Jobs</a>
+  <a href="#blue-ledger">Ledger</a>
+  <a href="#blue-attacklog">Attack-Log</a>
+  <a href="#blue-posture">Posture / SIEM</a>
+  <a href="#blue-runs">Läufe</a>
+</nav>
+
+<section class="card blue-card" id="blue-phases">
+  <h3>⬡ Phasen-Pipeline <small>jeder Soldat kennt seinen Abschnitt</small></h3>
+  <div id="octogent-phases" class="blue-phases-host">lädt Phasen…</div>
+</section>
+
+<section class="card blue-card blue-launch" id="blue-launch">
+  <h3>🐜🛡 Kolonie starten <small>read-only Default · scope-gebunden</small></h3>
+  <form id="blue-run-form" class="blue-form">
+    <label class="blue-field">Ziel (optional)
       <select name="target_id" id="blue-target">
         <option value="">localhost (lokales System)</option>
         {% for t in targets %}
@@ -21,84 +61,171 @@ non-destruktiv. Aktive Fixes und Honeypot-Starts nur mit Oversight-Freigabe.
         {% endfor %}
       </select>
     </label>
-    <label style="font-weight:bold">
+    <label class="blue-check">
       <input type="checkbox" name="apply_fixes" id="blue-apply" value="1">
       Aktive Fixes / Honeypot-Start (Oversight)
     </label>
-    <label id="blue-ack-wrap" style="display:none;font-weight:bold">
+    <label class="blue-check blue-ack" id="blue-ack-wrap" style="display:none">
       <input type="checkbox" name="oversight_ack" id="blue-ack" value="1">
       ✅ Human Oversight: ich bestätige die Freigabe aktiver Verteidigungs-Aktionen
     </label>
-    <button type="submit">🐜🛡 Kolonie starten</button>
+    <button type="submit" class="blue-go">🐜🛡 Kolonie starten</button>
   </form>
-  <pre id="blue-run-log" class="feed" style="max-height:220px;overflow:auto"></pre>
+  <pre id="blue-run-log" class="feed blue-feed" aria-live="polite"></pre>
 </section>
 
-<section class="card" id="soldier-section">
+<section class="card blue-card" id="soldier-section">
   <h3>🛡 Blue-Soldaten · Skills &amp; Playbooks
     <small id="soldier-summary">lädt…</small>
   </h3>
-  <input type="text" id="soldier-filter" placeholder="Blue-Soldaten / Skills / Aufgaben durchsuchen…"
-         style="max-width:420px;margin:.3rem 0;">
-  <div id="octogent-phases"></div>
-  <div id="soldier-cards">lädt…</div>
+  <p class="hint">Jeder Soldat öffnet mit dem Tab <strong>Skills</strong> — dort stehen die
+     Playbooks inkl. Aufgaben-Checkliste, Mode und Oversight-Flag. SKILL.md und Mems
+     liegen unter Vault / Datei-Chips.</p>
+  <input type="search" id="soldier-filter" class="blue-filter"
+         placeholder="Blue-Soldaten / Skills / Playbooks / Aufgaben durchsuchen…"
+         autocomplete="off">
+  <div id="soldier-cards" class="blue-soldier-grid">lädt Soldaten…</div>
 </section>
 
-<section class="card">
-  <h3>⏱ Wiederholbare Jobs</h3>
+<section class="card blue-card" id="blue-jobs">
+  <h3>⏱ Wiederholbare Jobs <small>nightly · weekly · on-demand</small></h3>
   <p class="hint">Automatisch wiederkehrende Checks (Software-Scan, Hardening-Audit,
      Remediation-Verify, voller Colony-Lauf). Non-destruktiv; aktive Fixes bleiben gated.</p>
-  <form id="blue-job-form" class="inline">
-    <input name="name" required placeholder="Name (z.B. nightly-swscan)">
+  <form id="blue-job-form" class="blue-form blue-job-form">
+    <input name="name" required placeholder="Name (z.B. nightly-swscan)" class="blue-field-input">
     <select name="kind">
       <option value="swscan">Software-/Versions-Scan</option>
       <option value="hardening">Hardening-Audit</option>
       <option value="remediate">Remediation-Verify</option>
       <option value="colony">Voller Colony-Lauf</option>
+      <option value="patching">Patch-Management</option>
+      <option value="firewall">Firewall-Audit</option>
+      <option value="identity">Identity-Hygiene</option>
+      <option value="tls">TLS-Posture</option>
+      <option value="logs">Log-Integrität</option>
+      <option value="backup">Backup-Verify</option>
+      <option value="watcher">Wächter-Check</option>
+      <option value="attacklog">Attack-Log Review</option>
     </select>
-    <input name="interval_sec" type="number" value="86400" style="width:8rem" title="Intervall in Sekunden">
+    <input name="interval_sec" type="number" value="86400" title="Intervall in Sekunden"
+           class="blue-field-input blue-interval">
     <button type="submit">+ Job anlegen</button>
   </form>
-  <table id="blue-jobs-table">
-    <thead><tr><th>ID</th><th>Name</th><th>Art</th><th>Intervall</th><th>Zuletzt</th><th>Aktionen</th></tr></thead>
-    <tbody>
-    {% for j in jobs %}
-      <tr data-id="{{ j.id }}">
-        <td>{{ j.id }}</td>
-        <td>{{ j.name }}</td>
-        <td><code>{{ j.kind }}</code></td>
-        <td>{{ j.interval_sec }}s</td>
-        <td>{{ j.last_run_label }}</td>
-        <td>
-          <button type="button" class="blue-job-run" data-id="{{ j.id }}">jetzt ausführen</button>
-        </td>
-      </tr>
-    {% else %}
-      <tr><td colspan="6">Noch keine Jobs angelegt.</td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
+  <div class="blue-jobs-wrap">
+    <table id="blue-jobs-table" class="blue-table">
+      <thead><tr><th>ID</th><th>Name</th><th>Art</th><th>Intervall</th><th>Zuletzt</th><th></th></tr></thead>
+      <tbody>
+      {% for j in jobs %}
+        <tr data-id="{{ j.id }}">
+          <td>{{ j.id }}</td>
+          <td>{{ j.name }}</td>
+          <td><code>{{ j.kind }}</code></td>
+          <td>{{ j.interval_sec }}s</td>
+          <td>{{ j.last_run_label }}</td>
+          <td>
+            <button type="button" class="blue-job-run" data-id="{{ j.id }}">jetzt ausführen</button>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="hint">Noch keine Jobs — lege oben den ersten an
+            (z.B. <code>nightly-swscan</code>).</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
   <h4>Letzte Job-Läufe</h4>
-  <ul id="blue-job-runs">
+  <ul id="blue-job-runs" class="blue-run-list">
   {% for r in job_runs %}
-    <li>#{{ r.job_id }} · {{ r.status }} · findings={{ r.finding_count }} ·
-        geschlossen={{ r.closed_count }} · <code>{{ r.run_id }}</code></li>
+    <li><span class="br-pill">#{{ r.job_id }}</span>
+        <span class="br-status">{{ r.status }}</span>
+        findings={{ r.finding_count }} · geschlossen={{ r.closed_count }}
+        · <code>{{ r.run_id }}</code></li>
   {% else %}
-    <li>Noch keine Job-Läufe.</li>
+    <li class="hint">Noch keine Job-Läufe.</li>
   {% endfor %}
   </ul>
 </section>
 
-<section class="card">
-  <h3>📡 Splunk (free/green) – optional</h3>
-  {% if splunk.configured %}
-  <p class="ok">HEC konfiguriert (URL gesetzt, Token gesetzt). Index: {{ splunk.index or '—' }} ·
-     sourcetype: {{ splunk.sourcetype }}</p>
+<section class="card blue-card" id="blue-ledger">
+  <h3>🧾 Posture-Ledger <small>Vorher/Nachher über Läufe
+    {% if blue_stats.updated %}· Stand {{ blue_stats.updated }}{% endif %}</small></h3>
+  {% if ledger_rows %}
+  <p class="hint">{{ blue_stats.tracked }} Checks verfolgt · {{ blue_stats.open }} offen ·
+     {{ blue_stats.closed }}× nachweislich geschlossen (fail → pass mit Re-Check).</p>
+  <div class="blue-jobs-wrap">
+  <table class="blue-table" id="blue-ledger-table">
+    <thead><tr><th>Status</th><th>Severity</th><th>Check</th><th>Befund</th><th>seit</th><th>geschl.</th></tr></thead>
+    <tbody>
+    {% for r in ledger_rows %}
+      <tr class="lg-{{ r.status }}">
+        <td><span class="lg-pill lg-{{ r.status }}">{{ 'OFFEN' if r.status == 'fail' else 'OK' }}</span></td>
+        <td>{{ r.severity }}</td>
+        <td>{{ r.title }}<br><code>{{ r.check_id }}</code></td>
+        <td class="hint">{{ r.detail }}</td>
+        <td>{{ r.since }}</td>
+        <td>{{ r.closed_count }}×</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
   {% else %}
-  <p class="hint">Nicht konfiguriert – Weiterleitung wird sauber übersprungen.
-     Setze <code>ANTBB_SPLUNK_HEC_URL</code> und <code>ANTBB_SPLUNK_HEC_TOKEN</code> (ENV),
-     optional <code>ANTBB_SPLUNK_INDEX</code> / <code>ANTBB_SPLUNK_SOURCETYPE</code>.</p>
+  <p class="hint">Noch kein Lauf gebucht. Starte oben die Kolonie – danach stehen hier alle
+     geprüften Checks mit Status; Lücken, die du behebst, erscheinen beim nächsten Lauf als
+     <strong>nachweislich geschlossen</strong>.</p>
   {% endif %}
+</section>
+
+
+<section class="card blue-card" id="blue-attacklog">
+  <h3>🕷 Permanenter Attack-Log <small>append-only · Angreifer + Gegenmaßnahme</small></h3>
+  <p class="hint">Lückenlose Dokumentation von Detection, Honeypot-Umleitung, Sofortschutz
+     und Rückverfolgung. Kein Truncate/Delete über die normale API.
+     <span id="alog-summary" class="br-pill">lädt…</span></p>
+  <div class="blue-jobs-wrap">
+    <table class="blue-table" id="blue-attacklog-table">
+      <thead><tr><th>Zeit</th><th>Typ</th><th>Quelle</th><th>Aktion</th><th>Gegenmaßnahme</th><th>Outcome</th></tr></thead>
+      <tbody id="alog-body"><tr><td colspan="6" class="hint">lädt…</td></tr></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card blue-card" id="blue-posture">
+  <h3>📡 Posture · Splunk (free/green)</h3>
+  <div class="blue-posture-grid">
+    <div class="blue-posture-tile">
+      <div class="bpt-label">SIEM / HEC</div>
+      {% if splunk.configured %}
+      <div class="bpt-ok">● konfiguriert</div>
+      <p class="hint">Index: {{ splunk.index or '—' }} · sourcetype: {{ splunk.sourcetype }}</p>
+      {% else %}
+      <div class="bpt-idle">○ nicht konfiguriert</div>
+      <p class="hint">Weiterleitung wird sauber übersprungen.
+         Setze <code>ANTBB_SPLUNK_HEC_URL</code> und <code>ANTBB_SPLUNK_HEC_TOKEN</code> (ENV),
+         optional <code>ANTBB_SPLUNK_INDEX</code> / <code>ANTBB_SPLUNK_SOURCETYPE</code>.</p>
+      {% endif %}
+    </div>
+    <div class="blue-posture-tile">
+      <div class="bpt-label">Leitplanken</div>
+      <ul class="blue-pillars">
+        <li>default-deny Scope</li>
+        <li>Human Oversight für aktive Schritte</li>
+        <li>Proof-Gate (Vorher/Nachher)</li>
+        <li>keine Secrets/PII in Findings</li>
+      </ul>
+    </div>
+    <div class="blue-posture-tile">
+      <div class="bpt-label">Orchestrierung</div>
+      <p class="hint">Die Königin verteilt die Phasen an die Soldaten und kann
+         dafür einen Provider aus der Umgebung nehmen (<a href="/providers">Status</a>).
+         Keys liegen nicht im Repository. <code>ANTBB_NO_LLM=1</code> lässt den Router aus.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card blue-card" id="blue-runs">
+  <h3>🗂 Blue-Läufe <small>nur colony=blue</small></h3>
+  <div id="blue-runs-list" class="blue-runs-list">lädt…</div>
 </section>
 
 <script>window.ANTBB_COLONY = "blue";</script>

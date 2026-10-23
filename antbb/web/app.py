@@ -38,7 +38,7 @@ from .. import telemetry
 BASE = os.path.dirname(__file__)
 templates = Jinja2Templates(directory=os.path.join(BASE, "templates"))
 
-app = FastAPI(title="antbb – Ameisen-Schwarm Bug-Bounty (lokal)")
+app = FastAPI(title="Blue Queen – Verteidigungs-Kolonie (lokal)")
 app.mount("/static", StaticFiles(directory=os.path.join(BASE, "static")), name="static")
 
 svc = AntBBService()
@@ -327,7 +327,13 @@ def _start_scan_async(target_id: int, active: bool, fuzz: bool,
 
 
 # ---------------- HTML-Seiten ----------------
-@app.get("/", response_class=HTMLResponse)
+@app.get("/")
+def home():
+    """Blue Queen ist die Startseite dieser Ausgabe."""
+    return RedirectResponse("/blue", status_code=302)
+
+
+@app.get("/scope", response_class=HTMLResponse)
 def index(request: Request):
     targets = []
     for t in svc.list_targets():
@@ -384,33 +390,16 @@ def target_page(request: Request, target_id: int):
     })
 
 
-@app.get("/wlan", response_class=HTMLResponse)
+@app.get("/wlan")
 def wlan_page(request: Request, target_id: Optional[int] = None):
-    """Eigenständige WLAN-Seite: bündelt passive Coverage/Survey, Kanal-Optimierung
-    und das autorisierte Offensiv-Modul als first-class Menüpunkt. Kein Target nötig;
-    target_id ist optional und wird nur an die passiven Survey-Panels durchgereicht."""
-    if target_id is not None and not svc.get_target(target_id):
-        target_id = None
-    notice = ("Drei klare Bereiche: WLAN-Scope (Allowlist) · Coverage & Scan (passiv + "
-              "Königin-Voll-Scan) · Offensiv/Airgorah (Gate-pflichtig).\n"
-              "Ein-Klick „Voller WLAN-Scan“: Königin dispatcht alle defensiven Checks – "
-              "kein Haken-Klicken. Offensiv bleibt default-deny (Engagement + Oversight + "
-              "ANTBB_WIFI=1). § 202a-c StGB / CFAA beachten.")
-    return templates.TemplateResponse(request, "wlan.html", {
-        "target_id": target_id,
-        "notice": notice,
-        "disclaimer": DISCLAIMER_TEXT,
-    })
+    """WLAN-Offensiv ist in dieser Ausgabe nicht die Oberfläche."""
+    return RedirectResponse("/blue", status_code=302)
 
 
-@app.get("/brain", response_class=HTMLResponse)
+@app.get("/brain")
 def brain_page(request: Request):
-    """Neuronales Gehirn der Koenigin: rein clientseitiges GPU-Partikelfeld
-    (Three.js r158, vendored). Keine Serverlogik, keine Secrets, keine externen
-    Datenabrufe, keine Telemetrie."""
-    return templates.TemplateResponse(request, "brain.html", {
-        "disclaimer": DISCLAIMER_TEXT,
-    })
+    """Das Pentest-Gehirn ist in dieser Ausgabe nicht die Oberfläche."""
+    return RedirectResponse("/blue", status_code=302)
 
 
 
@@ -428,9 +417,43 @@ def blue_page(request: Request):
         jobs.append(d)
     job_runs = [_rowdict(r) for r in svc.blue_job_runs(limit=20)]
     cap = svc.blue_capabilities()
+    blues = cap.get("soldiers") or []
+    pb_n = sum(len(s.get("playbooks") or []) for s in blues)
+    task_n = sum(((s.get("skill") or {}).get("task_count") or 0) for s in blues)
+    ledger_rows = []
+    lst = {"open_total": 0, "closed_total": 0, "tracked": 0, "updated_at": 0}
+    try:
+        from .. import blue_checks as _bc
+        led = _bc.ledger_load()
+        lst = _bc.ledger_stats(led)
+        _sevrank = {"high": 0, "medium": 1, "low": 2, "info": 3}
+        for cid, e in (led.get("checks") or {}).items():
+            since = e.get("failed_since") if e.get("status") == "fail" else e.get("closed_at")
+            ledger_rows.append({
+                "check_id": cid, "title": e.get("title", cid), "status": e.get("status", "?"),
+                "severity": e.get("severity", "low"), "detail": e.get("last_detail", ""),
+                "since": (_t.strftime("%Y-%m-%d %H:%M", _t.localtime(since)) if since else "—"),
+                "closed_count": int(e.get("closed_count", 0)),
+            })
+        ledger_rows.sort(key=lambda r: (0 if r["status"] == "fail" else 1,
+                                        _sevrank.get(r["severity"], 9), r["check_id"]))
+    except Exception:
+        pass
+    blue_stats = {
+        "soldiers": int(cap.get("soldier_count") or len(blues)),
+        "playbooks": pb_n,
+        "tasks": task_n,
+        "jobs": len(jobs),
+        "open": lst.get("open_total", 0),
+        "closed": lst.get("closed_total", 0),
+        "tracked": lst.get("tracked", 0),
+        "updated": (_t.strftime("%Y-%m-%d %H:%M", _t.localtime(lst["updated_at"]))
+                    if lst.get("updated_at") else ""),
+    }
     return templates.TemplateResponse(request, "blue.html", {
         "targets": targets, "jobs": jobs, "job_runs": job_runs,
         "splunk": cap.get("splunk", {}),
+        "blue_stats": blue_stats, "ledger_rows": ledger_rows,
         "disclaimer": DISCLAIMER_TEXT,
     })
 
@@ -505,6 +528,29 @@ def api_blue_job_runs(job_id: int, limit: int = 50):
 @app.post("/api/blue/jobs/tick")
 def api_blue_jobs_tick():
     return JSONResponse({"results": svc.blue_jobs_tick()})
+
+
+@app.get("/api/blue/attacklog")
+def api_blue_attacklog(limit: int = 50, run_id: str = "", event_type: str = ""):
+    return JSONResponse(svc.attack_log_list(limit=limit, run_id=run_id,
+                                            event_type=event_type))
+
+
+@app.post("/api/blue/watcher")
+def api_blue_watcher(payload: Optional[dict] = None):
+    payload = payload or {}
+    try:
+        return JSONResponse(svc.watcher_run(
+            events=payload.get("events") or [],
+            active=bool(payload.get("active") or payload.get("oversight_ack")),
+            apply_protect=bool(payload.get("apply_protect")),
+            kinds=payload.get("kinds"),
+            run_id=payload.get("run_id") or "",
+            target_id=payload.get("target_id"),
+        ))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+                            status_code=400)
 
 
 @app.get("/api/blue/softwarescan")
@@ -2018,10 +2064,16 @@ def _fmt_ts(ts) -> str:
 
 
 @app.get("/api/runs")
-def api_runs(target_id: Optional[int] = None):
+def api_runs(target_id: Optional[int] = None, colony: str = ""):
     out = []
+    want_blue = (colony or "").lower() == "blue"
     for r in svc.store.list_run_history(target_id):
         d = _rowdict(r)
+        if want_blue:
+            rid = str(d.get("run_id") or "")
+            mode = str(d.get("mode") or "")
+            if mode != "blue" and not rid.startswith("blue-"):
+                continue
         d["when"] = _fmt_ts(d.get("created_at"))
         out.append(d)
     return out

@@ -7,8 +7,8 @@ austauschbare LLM-Baustein eine Teilaufgabe denkt – aber das Schwarm-Verhalten
 Grundregeln (nachvollziehbar, nur verfügbare/authentifizierte Provider):
   * Kleine Arbeiter-Schritte / niedrige Komplexität → günstiges/schnelles Modell
     (bevorzugt lokales Ollama, sonst MiniMax-Flash).
-  * Entscheidungs-/komplexe Aufgaben ("was wie angreifen", Reihenfolge, tiefe
-    Analyse, Report-Narrativ) → stärkeres Modell (OpenAI/Kimi/MiniMax-M3).
+  * Entscheidungs-/komplexe Aufgaben (Einordnung, Reihenfolge, tiefe Analyse,
+    Bericht) → stärkeres Modell (OpenAI/Kimi/MiniMax-M3).
   * Nicht konfigurierte/erreichbare Provider werden übersprungen.
 
 Kritische/unsichere Entscheidungen lösen eine NUTZER-RÜCKFRAGE aus (Hook),
@@ -85,7 +85,7 @@ def route(task_type: Optional[str] = None, complexity: float = 0.0,
           ask_user: Optional[Callable[["UserQuery"], str]] = None) -> RouteDecision:
     """Router-Entscheidung: (provider, model) für eine Aufgabe.
 
-    task_type   – z.B. "recon", "classification", "attack_plan", "report"
+    task_type   – z.B. "assess", "classification", "remediate", "report"
     complexity  – 0..1; ab COMPLEXITY_THRESHOLD gilt die Aufgabe als komplex
     ask_user    – optionaler Hook; wird bei kritischen/unsicheren Fällen gerufen
                   und soll die gewählte Option (Provider-Name) zurückgeben.

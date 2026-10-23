@@ -6,15 +6,13 @@ hartkodiert, nie veraltet. Jeder Soldat hat einen klar benannten SKILL mit
 seiner Playbook-Liste; jedes Playbook trägt eine Liste konkreter AUFGABEN/
 CHECKS (task items) mit Default-Status, damit die GUI-Checklisten gefüllt sind.
 
-Zusätzlich werden die am Laufort verfügbaren externen Kali-Tools und die
-Wortlisten erfasst (nutzbare Tools der Königin). NIEMALS Secrets.
+Die Registry listet nur die Verteidigungs-Soldaten. NIEMALS Secrets.
 """
 from __future__ import annotations
 
 import time
 from typing import Optional
 
-from .agents import WORKER_AGENTS
 from .agents.blue import BLUE_AGENTS, BLUE_PHASES
 
 _SECRET_MARKERS = ("api_key", "apikey", "token", "secret", "password", "minimax")
@@ -38,37 +36,20 @@ def load_skill_md(soldier: str) -> str:
     except Exception:
         return ""
 
-# OctoGent-Orchestrator-Phasenmodell (recon → vuln-assessment → exploitation →
-# post-exploitation → reporting). Ordnet antbb-Soldaten + Tools je Phase zu.
-# Exploitation/Post-Exploitation nur unter Offensiv+Oversight, nicht-destruktiv.
+# Phasen der Verteidigungs-Kolonie (öffentliche Capability-Liste).
 OCTOGENT_PHASES = [
-    {"phase": "recon", "label": "Reconnaissance & OSINT", "mode": "defensive",
-     "soldiers": ["recon", "takeover", "osint", "infra", "mobile", "wifi"],
-     "tools": ["nmap", "subfinder", "httpx", "whatweb", "sslscan"],
-     "maps_to": "recon"},
-    {"phase": "vuln-assessment", "label": "Vulnerability Assessment", "mode": "defensive",
-     "soldiers": ["scanning", "api", "cloud", "auth", "llmsec", "codeaudit"],
-     "tools": ["nuclei", "nikto", "wafw00f", "wpscan"],
-     "maps_to": "scan"},
-    {"phase": "exploitation", "label": "Exploitation (Offensiv+Oversight)", "mode": "offensive",
-     "soldiers": ["fuzz", "verify", "poc"],
-     "tools": ["sqlmap", "gobuster", "ffuf", "interactsh-client (OOB/OAST)", "metasploit (nur auxiliary/scanner)"],
-     "maps_to": "verify",
-     "note": "Nur unter Offensiv+Oversight, nicht-destruktiv."},
-    {"phase": "post-exploitation", "label": "Post-Exploitation (dokumentiert, nicht automatisch)",
-     "mode": "offensive", "soldiers": ["analysis"],
-     "tools": ["(dokumentiert: Persistenz/Lateral/C2 NICHT automatisch)"],
-     "maps_to": "analyze",
-     "note": "Persistenz/Laterale Bewegung/C2 nur als dokumentierte, oversight-"
-             "pflichtige Optionen – NIE automatisch gegen fremde Systeme."},
-    {"phase": "reporting", "label": "Reporting & Debrief", "mode": "defensive",
-     "soldiers": ["threatintel", "reporting"],
-     "tools": ["NVD-API", "searchsploit", "report-builder"],
-     "maps_to": "report"},
+    {"phase": ph, "label": label, "mode": "defensive",
+     "soldiers": [], "tools": [], "maps_to": ph, "note": note}
+    for ph, label, note in (
+        ("assess", "Assess", "Inventar und lesende Checks."),
+        ("watch", "Watch", "Beobachten, Detection, Logs."),
+        ("harden", "Harden", "Härtung prüfen, Fixes nur mit Oversight."),
+        ("defend", "Defend", "Regeln, Decoys, Umleitung planen."),
+        ("remediate", "Remediate", "Finding zu einem Fix-Plan."),
+        ("verify", "Verify", "Vorher/Nachher belegen."),
+    )
 ]
 
-# Hinterlegter Scope aus den Octogent-Vorlagen – NUR Vorschlag/Historie, NICHT
-# automatisch erlaubt. Die echte Allowlist bleibt explizit + default-deny.
 SCOPE_SUGGESTIONS = {
     "note": ("Vorschlag/Historie – NICHT automatisch erlaubt. Die echte Allowlist bleibt explizit + default-deny."),
     "targets": ["demo.example.com", "shop.example.com", "app.example.com"],
@@ -81,136 +62,6 @@ SCOPE_SUGGESTIONS = {
 # Gefüllt für ALLE Soldaten. Default-Status pro Task: "offen".
 # ---------------------------------------------------------------------------
 TASK_CATALOG: dict[str, list[str]] = {
-    # --- recon ---
-    "dns-aufklaerung": ["A/AAAA-Records auflösen", "CNAME prüfen", "MX-Records erfassen",
-                         "TXT-Records (SPF/Verifikation) lesen"],
-    "subdomain-enumeration": ["Wortliste gegen Zone auflösen", "nur in-scope Subdomains behalten",
-                              "Wildcard-DNS erkennen"],
-    "tcp-connect-portscan": ["Standard-Ports verbinden", "offene Ports protokollieren",
-                             "riskante Ports (FTP/SMTP/DB) markieren"],
-    "nmap-service-scan": ["Top-Ports scannen (nmap)", "Dienst-/Versionsbanner lesen (-sV, offensiv)",
-                          "riskante Dienste markieren"],
-    # --- mobile ---
-    "manifest-analyse": ["AndroidManifest-Permissions prüfen", "exported Components erkennen",
-                         "cleartextTraffic-Flag prüfen"],
-    "certificate-pinning": ["Pinning-Konfiguration suchen", "fehlendes Pinning melden"],
-    "ios-ats": ["App Transport Security prüfen", "ATS-Ausnahmen erkennen"],
-    # --- scanning ---
-    "http-fingerprint": ["Statuscode erfassen", "Server-Header lesen", "x-powered-by auswerten",
-                         "Content-Type bestimmen"],
-    "security-header-analyse": ["CSP vorhanden?", "HSTS vorhanden?", "X-Content-Type-Options prüfen",
-                                "X-Frame-Options prüfen", "Referrer-Policy prüfen"],
-    "exposed-paths": ["/.git/ prüfen", "/.env prüfen", "/server-status prüfen",
-                      "Directory-Listing erkennen"],
-    "injection-indikatoren": ["Parameter-Reflektion testen (Marker)", "SQL-Fehler-Indikator (')"],
-    "whatweb-fingerprint": ["Technologien via whatweb erkennen", "Versionen extrahieren"],
-    "waf-detect": ["WAF/IPS via wafw00f erkennen"],
-    "nuclei-scan": ["nuclei-Templates (low–critical) laufen", "Treffer nach Severity einordnen",
-                    "als 'zu bestätigen' führen (kein eigener PoC)"],
-    "nikto-scan": ["nikto Web-Server-Checks", "Treffer als 'zu bestätigen' führen"],
-    "wpscan": ["WordPress erkennen", "Version/Plugins auflisten (nur wenn WP)"],
-    # --- api ---
-    "api-surface-discovery": ["OpenAPI/Swagger suchen", "GraphQL-Endpoint prüfen", "API-Wurzeln prüfen"],
-    "nuclei-api": ["nuclei gegen API-Oberfläche", "Treffer einordnen"],
-    "sqlmap-verify": ["parametrisierte URL finden", "sqlmap --batch (nicht-destruktiv)",
-                      "Injizierbarkeit aktiv bestätigen", "kein dump/os-shell"],
-    # --- infra ---
-    "tls-inspektion": ["TLS-Protokollversion lesen", "Zertifikatsablauf prüfen",
-                       "schwache Protokolle erkennen"],
-    "email-auth-dns": ["SPF (TXT) auswerten", "DMARC-Policy prüfen"],
-    "caa-dns": ["CAA-Records auswerten"],
-    "sslscan-tls": ["sslscan Cipher/Protokolle", "SSLv2/3 & TLS1.0/1.1 melden"],
-    # --- osint ---
-    "security-txt": ["/.well-known/security.txt lesen", "Kontakt prüfen", "Freemail-Kontakt melden"],
-    "csp-analyse": ["unsafe-inline erkennen", "unsafe-eval erkennen", "externe CDNs auflisten"],
-    "permissions-policy": ["Permissions-Policy-Header prüfen"],
-    "trufflehog-secrets": ["autorisierte Git/FS/GitHub-Quelle scannen", "verifizierte Secrets melden",
-                           "Secrets IMMER maskieren (nie Klartext)"],
-    "username-enumeration": ["Username/Handle explizit uebergeben", "sherlock laufen (Fallback maigret)",
-                             "gefundene Plattformen/URLs strukturieren", "als REFERENZ fuehren (kein aktiver Nachweis)",
-                             "Profile NICHT abrufen/scrapen", "honest-empty wenn Tool fehlt"],
-    # --- cloud ---
-    "storage-reference-detect": ["S3/GCS/Azure-Blob-Referenzen suchen", "öffentliche Buckets markieren"],
-    "cloud-header-hints": ["Cloud-/CDN-Header erkennen (via, x-amz, x-azure)"],
-    # --- auth ---
-    "cookie-flag-analyse": ["HttpOnly prüfen", "Secure prüfen", "SameSite prüfen"],
-    "auth-surface-discovery": ["Login-/Admin-Oberflächen finden", "Auth-Endpunkte erfassen"],
-    # --- llmsec ---
-    "llm-endpoint-discovery": ["LLM-/Chat-Endpunkte erkennen"],
-    "prompt-injection-aktiv": ["benigne Prompt-Injection-Marker testen (nur offensiv)",
-                               "Reflexion als Indikator melden"],
-    # --- fuzz ---
-    "content-discovery": ["Baseline/Catch-all messen", "Wortliste GET-probing",
-                          "nur signifikante Abweichungen melden"],
-    "parameter-fuzzing": ["Parameter-Marker einsetzen", "Reflektion/Fehler erkennen"],
-    "gobuster-discovery": ["SecLists-Wortliste wählen", "gobuster dir-Modus", "gefundene Pfade melden"],
-    "ffuf-fuzzing": ["FUZZ-Platzhalter setzen", "ffuf mit Wortliste", "Treffer nach Status filtern"],
-    # --- verify ---
-    "aktive-xss-bestaetigung": ["benignen XSS-Marker einsetzen", "unescaped Reflektion prüfen",
-                                "Evidence (Request+Response) erfassen"],
-    "aktive-sqli-bestaetigung": ["Boolean TRUE/FALSE vergleichen", "DB-Fehler-Signatur prüfen",
-                                 "time-based nur konservativ"],
-    "open-redirect-bestaetigung": ["Redirect-Parameter testen", "Location auf externe Domain prüfen"],
-    "path-traversal-bestaetigung": ["../-Sequenz testen", "Datei-Signatur in Response prüfen"],
-    "exposed-artifact-bestaetigung": ["Artefakt abrufen (.git/.env)", "Inhaltssignatur bestätigen"],
-    "cors-bestaetigung": ["Origin-Spiegelung testen", "ACAO + credentials prüfen"],
-    "missing-auth-bestaetigung": ["privilegierten Endpunkt ohne Auth abrufen", "Zugriff bestätigen"],
-    "ssrf-bestaetigung": ["URL-/Webhook-/Image-Parameter entdecken",
-                          "in-scope Canary + eindeutige interactsh-OOB-URL injizieren",
-                          "OOB-Interaktion korrelieren (blind SSRF)",
-                          "ohne OOB nur In-Band-Signal als 'zu bestätigen' führen",
-                          "nur GET/HEAD, nach Beweis stoppen (nicht-destruktiv)"],
-    "subdomain-takeover-fingerprint": ["CNAME der (Sub-)Domain auflösen",
-                                       "gegen bekannte Takeover-Dienste matchen (GitHub/S3/Heroku/Azure/…)",
-                                       "Dienst-'nicht beansprucht'-Signatur prüfen",
-                                       "VERIFIZIERT nur bei CNAME- UND Signatur-Match",
-                                       "nichts beanspruchen/registrieren (nur Nachweis)"],
-    "metasploit-aux-scanner": ["nur auxiliary/scanner/* (hart allowlisted)", "nicht-destruktiv run",
-                               "Treffer als 'zu bestätigen' führen"],
-    # --- analysis ---
-    "cvss-vorschlag": ["Severity je Finding ableiten", "CVSS-Score schätzen (als Schätzung markiert)"],
-    "angriffsketten-korrelation": ["zusammenhängende Findings verketten", "Angriffspfad skizzieren"],
-    # --- codeaudit (statische Quell-Review, read-only) ---
-    "source-credential-scan": ["autorisierten Quellpfad (code_path) rein lesend begehen",
-                           "benannte Secret-Literale erkennen (api_key/token/password/…)",
-                           "bekannte Token-Formate matchen (AWS/GitHub/Slack/Google/PRIVATE KEY)",
-                           "Platzhalter/Env-Referenzen ausfiltern (keine Scheinbefunde)",
-                           "Werte IMMER maskieren (nie Klartext)"],
-    "source-injection-review": ["gefährliche Sinks finden (eval/exec/os.system/subprocess shell=True)",
-                                "SQL per String-Konkatenation/Interpolation erkennen",
-                                "unsichere Deserialisierung (pickle/yaml.load/marshal) erkennen",
-                                "konstantes Sink-Argument zu Härtungshinweis herabstufen",
-                                "variable Eingabe als ZU BESTÄTIGEN führen (Taint-Pfad offen, keine Severity)",
-                                "Coverage (gelesene Dateien) zählbar melden"],
-    # --- threatintel ---
-    "tech-cve-korrelation": ["Fingerprints parsen", "Katalog-CVE zuordnen", "Version-Gating (REFERENZ/BEDINGT)"],
-    "nvd-cve-lookup": ["Technologie+Version extrahieren", "NVD-API abfragen (Rate-Limit)",
-                       "CVSS von NVD übernehmen (nie erfinden)"],
-    "searchsploit-lookup": ["lokale Exploit-DB durchsuchen", "Treffer als REFERENZ führen"],
-    # --- poc ---
-    "poc-template-builder": ["Reproduktions-Request bauen", "nur aus echter Evidence"],
-    # --- reporting ---
-    "report-aggregation": ["Findings aggregieren", "Severity-/Status-Zählung (Single Source)"],
-    "proof-gate-validierung": ["VERIFIZIERT ohne Evidence herabstufen", "Catch-all als FP markieren",
-                               "Zählstände konsistent halten"],
-    # --- wifi ---
-    "wlan-scan": ["lokale WLANs scannen (nmcli/iw)", "SSID/Kanal/Signal erfassen",
-                  "Verschlüsselung bestimmen"],
-    "wlan-konfig-check": ["WEP/offen erkennen", "WPS/TKIP-Schwächen melden"],
-    "wlan-optimierung": ["Kanalbelegung bewerten", "Kanal-/Signal-Empfehlung geben"],
-    "wlan-handshake-capture": ["Engagement-Gate prüfen (default-deny)", "Rechtshinweis loggen",
-                               "WPA-Handshake/PMKID gegen autorisierte BSSID erfassen",
-                               "Capture-Pfad+Meta speichern (nie Secrets)", "honest-empty ohne Tool"],
-    "wlan-targeted-deauth": ["Engagement-Gate prüfen (default-deny)", "Rechtshinweis loggen",
-                             "GEZIELTER Deauth nur gegen autorisierte BSSID (paket-/zeitbegrenzt)",
-                             "kein Broadcast/Massen-Deauth", "Warnung: trennt Clients"],
-    "wlan-offline-crack": ["Engagement-Gate prüfen (default-deny)", "Wortliste wählen (rockyou/SecLists)",
-                           "OFFLINE gegen eigene/autorisierte Capture cracken",
-                           "Ergebnis maskiert speichern (nie Klartext)", "honest-empty ohne Tool/Capture"],
-    "wlan-evil-twin-demo": ["Engagement-Gate prüfen (default-deny)", "Rechtshinweis loggen",
-                            "Rogue-AP + Captive-Portal zeitbegrenzt (operator-getrieben)",
-                            "Credentials nur als Nachweis (maskiert/gehasht)",
-                            "Auto-Purge nach Report"],
     # --- blue queen ---
     "sw-inventory": ["Paketmanager rein lesend abfragen (dpkg/rpm/pip)",
                      "Paketname+Version erfassen", "keine Secrets"],
@@ -227,7 +78,79 @@ TASK_CATALOG: dict[str, list[str]] = {
     "remediation-verify": ["rein lesender Re-Check", "Vorher/Nachher-Evidence",
                            "nachweislich geschlossen belegen"],
     "honeypot-recipes": ["sichere Decoy-Rezepte dokumentieren"],
-    "honeypot-deploy": ["Decoy NUR mit Oversight starten (default-deny, Scaffold)"]
+    "honeypot-deploy": ["Decoy NUR mit Oversight starten (default-deny, Scaffold)"],
+    # --- blue extras (watcher / attacklog / web / net / supply / ir) ---
+    "watcher-detect": ["Events entgegennehmen", "Signal-Katalog anwenden",
+                       "Treffer mit Evidence erfassen", "Ohne Events: honest-empty"],
+    "watcher-divert-protect": ["Divert je Detection planen",
+                               "Sofortschutz empfehlen (rate-limit/block)",
+                               "Aktives Anwenden nur mit Oversight"],
+    "watcher-traceback": ["Sources korrelieren", "Fingerprints/Sessions sammeln",
+                          "Keine erfundenen IPs/Identitäten",
+                          "Attribution im Attack-Log ablegen"],
+    "watcher-full-run": ["Oversight prüfen", "run_watch ausführen",
+                         "Log-IDs zurückgeben", "Summary melden"],
+    "attacklog-append": ["Event normalisieren", "Secrets redakten",
+                         "In Store schreiben", "Optional Splunk spiegeln"],
+    "attacklog-review": ["Events lesen (Limit)", "Nach Typ zählen",
+                         "Nach Outcome zählen", "Keine Delete-API nutzen"],
+    "attacklog-integrity": ["EVENT_TYPES prüfen", "delete_api=False bestätigen",
+                            "Summary erzeugen"],
+    "patch-recheck": ["Audit erneut laufen", "Status je Check erfassen",
+                      "Abweichungen melden", "Passes als geschlossen markieren"],
+    "patch-verify-finding": ["Finding-Key lesen", "verify_closed aufrufen",
+                             "Evidence Vorher/Nachher speichern"],
+    "ir-triage": ["Signal klassifizieren", "Business-Impact schätzen",
+                  "Severity setzen", "On-Call informieren"],
+    "ir-containment": ["Betroffene Assets isolieren", "Credentials rotieren (geplant)",
+                       "Honeypot-Umleitung prüfen", "Firewall-Regel temporär"],
+    "ir-eradication-recovery": ["Root-Cause eingrenzen", "Patches einspielen",
+                                "Services wiederherstellen", "Lessons-Learned"],
+    "ir-comms": ["Stakeholder-Liste", "Status-Update-Takt",
+                 "Externe Meldepflichten", "Keine Secrets in Comms"],
+    "backup-inventory": ["Standard-Pfade prüfen", "mtime/Alter berechnen",
+                         "Veraltete Backups melden", "Fehlende Locations melden"],
+    "backup-restore-drill-plan": ["Ziel-System definieren", "Restore-Fenster wählen",
+                                  "Erfolgskriterien festlegen", "Kein Auto-Restore"],
+    "net-listen-audit": ["ss/netstat lesen", "Ports extrahieren",
+                         "Gegen Risiko-Katalog matchen", "Empfehlungen geben"],
+    "net-firewall-status": ["Tool erkennen", "Aktiv-Status lesen",
+                            "Default-Deny empfehlen wenn inaktiv"],
+    "net-exposure-report": ["Findings aggregieren", "Priorität setzen",
+                            "Härtungsmaßnahmen vorschlagen"],
+    "web-security-headers": ["HTTP-Response holen", "Header-Katalog prüfen",
+                             "Fehlende Header als Finding", "Empfehlungen geben"],
+    "web-cookie-flags": ["Set-Cookie lesen", "Flags prüfen", "Lücken melden"],
+    "web-tls-basics": ["TLS-Handshake", "Version lesen", "Schwache Protokolle melden"],
+    "cred-key-permissions": ["Standard-Pfade scannen", "mode/world-readable prüfen",
+                             "Findings ohne Klartext-Secrets", "chmod-Empfehlung"],
+    "cred-hygiene-report": ["Treffer zählen", "High-Findings priorisieren",
+                            "Remediation-Hinweise bündeln"],
+    "sc-manifest-inventory": ["Manifeste finden", "Pakete+Versionen parsen",
+                              "Inventar-Finding erzeugen"],
+    "sc-osv-audit": ["Pakete mit Version wählen", "OSV abfragen",
+                     "CVE-IDs nur aus OSV", "Offline sauber skippen"],
+    "sc-remediation-hints": ["fixed-Version aus OSV", "Priorität nach Severity",
+                             "Kein automatisches Upgrade"],
+    "logging-splunk-status": ["ENV-Status lesen", "configured ja/nein",
+                              "Index/Sourcetype melden", "Token nie ausgeben"],
+    "logging-event-map": ["Beispiel-Finding mappen", "Felder prüfen",
+                          "Ohne Config Skip bestätigen"],
+    "logging-forward-smoke": ["send_events aufrufen", "skipped/ok auswerten",
+                              "Fehler ehrlich melden"],
+    "honeypot-divert-plan": ["Signal klassifizieren", "Decoy wählen",
+                             "Umleitungs-Schritte dokumentieren",
+                             "Sofortschutz-Empfehlung anhängen"],
+    "patch-posture": ["ausstehende Updates lesen", "Paketlisten-Alter",
+                      "Reboot-Pflicht", "Auto-Security-Updates"],
+    "patch-policy-check": ["unattended-upgrades prüfen", "OS-Release erfassen"],
+    "patch-apply": ["Oversight prüfen", "Updates nur mit Freigabe",
+                    "Dokumentieren statt blind installieren"],
+    "fw-ruleset-audit": ["ufw/nft/iptables Status", "aktive Regeln prüfen"],
+    "fw-exposure-review": ["Wildcard-Listener", "Risiko-Ports", "IP-Forwarding"],
+    "fw-rule-apply": ["Oversight prüfen", "Default-Deny vorschlagen",
+                      "nur mit Freigabe anwenden"],
+
 }
 
 
@@ -244,7 +167,7 @@ def _tasks_for(pb: dict) -> list[dict]:
 
 def build_registry(agents=None, include_blue: bool = True) -> dict:
     if agents is None:
-        agents = list(WORKER_AGENTS) + (list(BLUE_AGENTS) if include_blue else [])
+        agents = list(BLUE_AGENTS) if include_blue else []
     soldiers = []
     pb_count = 0
     tool_count = 0

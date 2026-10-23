@@ -1,101 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<p><a href="/">← zurück</a></p>
+<p><a href="/scope">← Scope</a> · <a href="/blue">Blue Queen</a></p>
 <h2>{{ target.name }} <small>#{{ target.id }}</small></h2>
 <pre class="notice">{{ notice }}</pre>
-
-<!-- ======================= LEBENDIGE AMEISEN-KARTE ======================= -->
-<section class="card antmap-card" id="antmap-card">
-  <h3>Lebende Schwarm-Karte 🐜
-    <small>Nest-Querschnitt · Königin im Thron · Agenten-Kammern · Ziel-Ausgrabung</small>
-  </h3>
-  <div id="antmap-wrap">
-    <canvas id="antmap-3d"></canvas>
-    <canvas id="antmap"></canvas>
-    <div id="antmap-tip" class="antmap-tip" hidden></div>
-
-    <!-- Königin-Kammer (klappt aus dem Hügel auf) -->
-    <div id="queen-chamber" class="queen-chamber" aria-hidden="true">
-      <div class="chamber-head">
-        <span>👑 Königin-Kammer</span>
-        <button type="button" id="chamber-close" class="chamber-x" title="schließen">✕</button>
-      </div>
-      <div class="chamber-tabs">
-        <button type="button" class="ctab active" data-tab="brain">🧠 Neuronales Gehirn</button>
-        <button type="button" class="ctab" data-tab="memgraph">🕸️ Memgraph</button>
-        <button type="button" class="ctab" data-tab="memories">📚 Memories</button>
-      </div>
-      <div id="chamber-body" class="chamber-body">lädt…</div>
-    </div>
-  </div>
-  <div class="antmap-legend">
-    <span><i class="dot idle"></i>idle</span>
-    <span><i class="dot running"></i>läuft</span>
-    <span><i class="dot done"></i>fertig</span>
-    <span><i class="dot blocked"></i>geblockt / out-of-scope</span>
-    <span class="hint">Hover (PC) / Tap (Handy) auf einen Node = Status · Tap auf 👑 = Kammer</span>
-  </div>
-  <p class="hint" id="map-mode-line"></p>
-</section>
-
-<!-- ======================= SOLDATEN-KARTEN (Octogents-Stil) ======================= -->
-<section class="card" id="soldier-section">
-  <h3>🐜 Soldaten · Skills &amp; Playbooks
-    <small id="soldier-summary">lädt…</small>
-  </h3>
-  <input type="text" id="soldier-filter" placeholder="Soldaten / Skills / Aufgaben durchsuchen…"
-         style="max-width:420px;margin:.3rem 0;">
-  <div id="octogent-phases"></div>
-  <div id="soldier-cards">lädt…</div>
-</section>
-
-<!-- ======================= GESAMT-SICHERHEITSBEWERTUNG + HEATMAP ======================= -->
-<section class="card" id="rating-section">
-  <h3>🛡️ Gesamt-Sicherheitsbewertung <small>neutral, aus verifizierten Befunden abgeleitet</small></h3>
-  <div id="rating-view">lädt…</div>
-  <h4 style="margin-top:1rem;">Risiko-Heatmap (Kategorie × Severity)</h4>
-  <div id="heatmap-view">lädt…</div>
-</section>
-
-<!-- ======================= PASSIVE WLAN-ABDECKUNG / SITE-SURVEY ======================= -->
-<section class="card" id="wlan-section">
-  <h3>📡 WLAN-Abdeckung &amp; Optimierung <small>passiv – Kanal/Störung/Funklöcher, keine Angriffe</small></h3>
-  <div id="wlan-view">lädt…</div>
-</section>
-
-<!-- ======================= AUTORISIERTES WLAN-OFFENSIV-MODUL ======================= -->
-<section class="card" id="wlan-offensive-section">
-  <h3>🗡️ WLAN-Offensiv <small>AUTORISIERT – Engagement-Gate + Oversight, default-deny</small></h3>
-  <div id="wlan-offensive-view">lädt…</div>
-</section>
-
-<section class="card mode-card">
-  <h3>Modus 🛡️</h3>
-  <p>
-    <strong>Policy:</strong>
-    <span class="badge">{{ mode.mode_policy }}</span>
-    · <strong>Effektiv:</strong>
-    {% if mode.effective_mode == "offensive" %}
-      <span class="ok">offensiv</span>
-    {% else %}
-      <span class="blocked">defensiv</span>
-    {% endif %}
-  </p>
-  <p class="hint">{{ mode.reason }}</p>
-  <p class="hint">In-Scope: {{ mode.in_scope_count }} · Oversight:
-    {% if mode.oversight %}<span class="ok">✔</span>{% else %}<span class="blocked">✘</span>{% endif %}
-  </p>
-  <form method="post" action="/target/{{ target.id }}/mode" class="inline">
-    <label>mode_policy
-      <select name="mode_policy">
-        <option value="defensive" {% if mode.mode_policy=="defensive" %}selected{% endif %}>defensive (Offensiv gesperrt)</option>
-        <option value="auto" {% if mode.mode_policy=="auto" %}selected{% endif %}>auto (Offensiv nur bei Scope+Oversight)</option>
-        <option value="offensive" {% if mode.mode_policy=="offensive" %}selected{% endif %}>offensive (Offensiv erlaubt bei Scope+Oversight)</option>
-      </select>
-    </label>
-    <button type="submit">Policy speichern</button>
-  </form>
-</section>
+<p class="hint">Die Verteidigungs-Kolonie startest du unter <a href="/blue">/blue</a>.
+Hier gelten Scope (default-deny) und das Human-Oversight-Häkchen.</p>
 
 <section class="card {% if confirmed %}ok-border{% else %}blocked-border{% endif %}">
   <h3>Human-Oversight (Pflicht-Gate)</h3>
@@ -137,80 +46,6 @@
   </form>
 </section>
 
-<section class="card" id="swarm">
-  <h3>Swarm-Control 👑 <small>(on-device, kein CLI nötig)</small></h3>
-  <form method="post" action="/target/{{ target.id }}/scan" id="scan-form">
-    <label style="display:block;margin:.5rem 0;font-weight:bold">
-      <input type="checkbox" name="offensive" value="on"
-        {% if mode.offensive_allowed %}checked{% else %}disabled{% endif %}>
-      🗡️ Offensiv-Modus ENGAGIEREN (autorisiert) — führt die aktiven Angriffs-Playbooks
-      + Fuzzing aus (kein read-only Fallback). Benötigt Scope + Oversight + policy auto/offensive.
-    </label>
-    <p class="hint">Fein­steuerung (optional, wird vom Offensiv-Häkchen ohnehin aktiviert):</p>
-    <label style="display:block;margin:.5rem 0">
-      <input type="checkbox" name="active" value="on"
-        {% if not mode.offensive_allowed %}disabled{% endif %}>
-      🔬 Aktive Verifikation (autorisiert) — XSS/SQLi/Redirect/Traversal/Artefakte/CORS/Missing-Auth.
-    </label>
-    <label style="display:block;margin:.5rem 0">
-      <input type="checkbox" name="fuzz" value="on"
-        {% if not mode.offensive_allowed %}disabled{% endif %}>
-      🔬 Offensives Fuzzing (autorisiert) — GET Content-Discovery mit Catch-all-Baseline.
-    </label>
-    {% if not mode.offensive_allowed %}
-      <p class="blocked">Offensiv-Checkboxen deaktiviert: {{ mode.reason }}</p>
-    {% endif %}
-    <!-- Konsistentes Human-Oversight-Gate fuer AKTIVE/OFFENSIVE Ausloeser -->
-    <div class="card active-oversight-gate blocked-border" id="active-oversight-gate"
-         style="margin:.6rem 0;" hidden>
-      <pre class="notice">⚖ {{ active_legal_notice }}</pre>
-      <label style="display:block;margin:.3rem 0;font-weight:bold">
-        <input type="checkbox" name="oversight_active" value="on" id="oversight-active">
-        ✅ {{ active_oversight_prompt }}
-      </label>
-      <p class="hint">Default-deny: ohne dieses Human-Oversight-Häkchen wird jede
-        aktive/offensive Aktion serverseitig verweigert – es wird nichts gestartet.</p>
-    </div>
-    <button type="submit" {% if not confirmed %}disabled title="Oversight fehlt"{% endif %}>
-      🐜 Schwarm starten (asynchron · Live-Feed unten)</button>
-  </form>
-  <script>
-  (function(){
-    var form=document.getElementById("scan-form"); if(!form) return;
-    var gate=document.getElementById("active-oversight-gate");
-    var ack=document.getElementById("oversight-active");
-    var boxes=["offensive","active","fuzz"].map(function(n){return form.querySelector('[name="'+n+'"]');});
-    function anyActive(){return boxes.some(function(b){return b && !b.disabled && b.checked;});}
-    function sync(){
-      var on=anyActive();
-      gate.hidden=!on;
-      // Default-deny im UI UND serverseitig: Start nur mit Häkchen bei aktiv/offensiv.
-      if(on && ack && !ack.checked){gate.classList.add("blocked-border");}
-    }
-    boxes.forEach(function(b){if(b)b.addEventListener("change",sync);});
-    if(ack)ack.addEventListener("change",sync);
-    form.addEventListener("submit",function(e){
-      if(anyActive() && ack && !ack.checked){
-        e.preventDefault();
-        gate.hidden=false;
-        alert("Human-Oversight-Freigabe erforderlich: Bitte das Häkchen für die "+
-              "aktive/offensive Durchführung bestätigen (§202a-c).");
-      }
-    });
-    sync();
-  })();
-  </script>
-  {% if not confirmed %}<p class="blocked">Button deaktiviert: erst Oversight bestätigen.</p>{% endif %}
-</section>
-
-<section class="card" id="live">
-  <h3>Live-Status
-    <span id="scan-badge" class="badge">{{ scan_state.status }}</span>
-  </h3>
-  <pre id="live-feed" class="live-feed">Warte auf Events…</pre>
-  <p class="hint">Echter WebSocket-Live-Feed (<code>/ws/feed</code>) · automatischer Fallback auf Polling (<code>/api/feed</code>) · nur lokale on-device-Ausführung (kein Fernzugriff).</p>
-</section>
-
 <section class="card">
   <h3>Findings ({{ findings|length }}) <small>nach Severity</small></h3>
   <table>
@@ -226,7 +61,7 @@
 </section>
 
 <section class="card" id="report-download">
-  <h3>📄 Professioneller Pentest-Report</h3>
+  <h3>Bericht</h3>
   <p class="hint">Gebrandeter Bericht mit Deckblatt, Management Summary, Methodik,
     Findings (Proof-Gate), Zählübersicht und Anhang – nur echte Store-Daten.</p>
   <div class="row" style="gap:.6rem;flex-wrap:wrap;align-items:center">
@@ -354,106 +189,6 @@ window.ANTBB = {
 };
 </script>
 <script>window.ANTBB_TARGET_ID = {{ target.id }};</script>
-<script src="/static/soldiers.js"></script>
-<script src="/static/rating.js"></script>
-<script src="/static/wlan.js"></script>
-<script src="/static/wlan_offensive.js"></script>
-<script src="/static/antmap.js"></script>
-<script src="/static/antmap_colony.js"></script>
-<script type="importmap">
-{ "imports": {
-    "three": "/static/vendor/three.module.js",
-    "three/addons/": "/static/vendor/"
-} }
-</script>
-<script type="module" src="/static/antmap3d.js"></script>
-<script>
-(function () {
-  // Echter WebSocket-Live-Feed mit robustem Fallback auf /api/feed-Polling.
-  const feedEl = document.getElementById("live-feed");
-  const badge = document.getElementById("scan-badge");
-  let since = 0;            // Polling-Cursor
-  let lastStatus = "";
-  let usingWS = false;
-  let ws = null;
-  let wsRetries = 0;
-  let pollTimer = null;
-
-  function appendLines(events) {
-    if (!events || !events.length) return;
-    const lines = events.map(e => e.msg || JSON.stringify(e));
-    const prev = feedEl.textContent === "Warte auf Events…" ? "" : feedEl.textContent;
-    feedEl.textContent = (prev ? prev + "\n" : "") + lines.join("\n");
-    feedEl.scrollTop = feedEl.scrollHeight;
-  }
-
-  function applyData(data, opts) {
-    opts = opts || {};
-    if (data.backlog) {                 // vollständiger Anfangszustand (WS)
-      feedEl.textContent = "Warte auf Events…";
-    }
-    if (data.events && data.events.length) appendLines(data.events);
-    if (typeof data.total === "number") since = data.total;  // Cursor syncen
-    if (data.agents && window.AntMap) window.AntMap.updateAgents(data.agents, data.queen);
-    if (data.scan) {
-      badge.textContent = data.scan.status +
-        (data.scan.finding_count ? " · " + data.scan.finding_count + " Findings" : "");
-      if (data.scan.status === "done" && lastStatus === "running") {
-        location.reload();
-        return;
-      }
-      lastStatus = data.scan.status;
-    }
-  }
-
-  // ---- Polling-Fallback ----
-  async function poll() {
-    if (usingWS) return;                // WS aktiv -> kein Polling
-    try {
-      const r = await fetch("/api/feed?since=" + since);
-      const data = await r.json();
-      applyData(data);
-    } catch (e) { /* still */ }
-    pollTimer = setTimeout(poll, 1500);
-  }
-  function startPolling() {
-    if (pollTimer) clearTimeout(pollTimer);
-    poll();
-  }
-
-  // ---- WebSocket mit Reconnect/Backoff ----
-  function connectWS() {
-    if (!("WebSocket" in window)) { startPolling(); return; }
-    let proto = location.protocol === "https:" ? "wss:" : "ws:";
-    try {
-      ws = new WebSocket(proto + "//" + location.host + "/ws/feed");
-    } catch (e) { startPolling(); return; }
-
-    ws.onopen = function () { usingWS = true; wsRetries = 0; if (pollTimer) clearTimeout(pollTimer); };
-    ws.onmessage = function (ev) {
-      try { const data = JSON.parse(ev.data); if (!data.keepalive) applyData(data); }
-      catch (e) { /* ignore */ }
-    };
-    ws.onclose = function () {
-      usingWS = false;
-      wsRetries++;
-      if (wsRetries <= 5) {
-        // kurzer Reconnect-Versuch mit exponentiellem Backoff
-        setTimeout(connectWS, Math.min(1000 * Math.pow(2, wsRetries - 1), 15000));
-        // in der Zwischenzeit Polling, damit nichts verloren geht
-        startPolling();
-      } else {
-        startPolling();               // dauerhaft auf Polling zurückfallen
-      }
-    };
-    ws.onerror = function () { try { ws.close(); } catch (e) {} };
-  }
-
-  connectWS();
-  // Sicherheitsnetz: falls WS nicht binnen 2.5s offen ist, parallel pollen.
-  setTimeout(function () { if (!usingWS) startPolling(); }, 2500);
-})();
-</script>
 <script>
 (function () {
   const sel = document.getElementById("prefill-finding");

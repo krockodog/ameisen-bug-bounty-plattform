@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Optional
 
@@ -21,7 +22,7 @@ from .agents.blue import BLUE_PHASES
 from .blue_queen import BlueQueen
 from .store import Store
 
-VALID_KINDS = frozenset({"swscan", "hardening", "remediate", "colony"})
+VALID_KINDS = frozenset({"swscan", "hardening", "remediate", "colony", "patching", "firewall", "identity", "tls", "logs", "backup", "watcher", "attacklog"})
 
 _KIND_PHASES = {
     "swscan": ("assess",),
@@ -83,8 +84,11 @@ class JobScheduler:
             params = {}
         started = time.time()
         try:
+            use_llm = os.environ.get("ANTBB_NO_LLM", "").strip().lower() not in (
+                "1", "true", "yes", "on",
+            )
             queen = BlueQueen(self.store, logger=self.logger, emit=self.emit,
-                              use_llm=False)
+                              use_llm=use_llm)
             # Job-Art kann auf einzelne Soldaten eingrenzen.
             only = _KIND_AGENTS.get(kind)
             if only:
