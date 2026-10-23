@@ -821,3 +821,69 @@ class AntBBService:
             "fast_model": llm_mod.FAST_MODEL,
             "providers": llm_mod.status_all(),
         }
+
+    # ---------------- Blue Queen (Verteidigungs-Kolonie) ----------------
+    def blue_capabilities(self) -> dict:
+        """Blue-Soldaten aus der Registry (colony=blue)."""
+        reg = self.capabilities(rebuild=True)
+        blues = [s for s in reg.get("soldiers", []) if s.get("colony") == "blue"]
+        return {
+            "blue_phases": reg.get("blue_phases", []),
+            "soldier_count": len(blues),
+            "soldiers": blues,
+            "splunk": __import__("antbb.splunk", fromlist=["status"]).status(),
+        }
+
+    def run_blue(self, target_id: Optional[int] = None,
+                 phases: Optional[tuple] = None, apply_fixes: bool = False,
+                 oversight_ack: Optional[bool] = None,
+                 params: Optional[dict] = None,
+                 emit: Optional[Callable[[dict], None]] = None):
+        """Startet die Verteidigungs-Kolonie (Blue Queen). Default: read-only."""
+        from .blue_queen import BlueQueen, PHASES as BP
+        queen = BlueQueen(self.store, logger=self.logger, emit=emit, use_llm=False)
+        return queen.run_colony_sync(
+            target_id=target_id, phases=phases or BP,
+            apply_fixes=apply_fixes, oversight_ack=oversight_ack,
+            params=params)
+
+    def blue_jobs_list(self, enabled_only: bool = False):
+        from .jobs import JobScheduler
+        return JobScheduler(self.store, logger=self.logger).list(enabled_only)
+
+    def blue_job_create(self, name: str, kind: str, interval_sec: int = 86400,
+                        target_id: Optional[int] = None,
+                        params: Optional[dict] = None) -> int:
+        from .jobs import JobScheduler
+        return JobScheduler(self.store, logger=self.logger).create(
+            name, kind, interval_sec=interval_sec, target_id=target_id,
+            params=params)
+
+    def blue_job_run(self, job_id: int) -> dict:
+        from .jobs import JobScheduler
+        return JobScheduler(self.store, logger=self.logger).run_once(job_id)
+
+    def blue_job_runs(self, job_id: Optional[int] = None, limit: int = 50):
+        from .jobs import JobScheduler
+        return JobScheduler(self.store, logger=self.logger).runs(job_id, limit)
+
+    def blue_jobs_tick(self) -> list:
+        from .jobs import JobScheduler
+        return JobScheduler(self.store, logger=self.logger).tick()
+
+    def softwarescan(self, online: bool = True, ecosystems=None) -> dict:
+        """Direkter Software-/Versions-Scan (ohne Kolonie-Lauf)."""
+        from . import softwarescan as sw
+        rep = sw.scan(ecosystems=ecosystems, online=online)
+        return {
+            "summary": rep.summary(),
+            "packages": [{"name": p.name, "version": p.version,
+                          "ecosystem": p.ecosystem, "source": p.source}
+                         for p in rep.packages],
+            "matches": [{"package": m.package, "version": m.version,
+                         "ecosystem": m.ecosystem, "vuln_id": m.vuln_id,
+                         "summary": m.summary, "severity": m.severity,
+                         "fixed": m.fixed, "aliases": m.aliases}
+                        for m in rep.matches],
+        }
+

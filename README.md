@@ -28,8 +28,10 @@
 > `wlan_offensive.py` / `wlan_airgorah.py` · `scope`/`oversight`/`proofgate` ·
 > `web/` (FastAPI-Backend + Templates + Static/Neural-Brain) · Reports/Rating.
 >
-> **Noch NICHT enthalten (ehrlich):** die **Blue Queen** (Verteidigungs-Königin)
-> ist noch nicht gebaut und folgt separat – siehe Abschnitt „Roadmap".
+> **Blue Queen (Grundgerüst):** Verteidigungs-Kolonie unter `/blue` –
+> Softwarescan, Hardening-Audit, Remediation-Verify, Detection-Regeln,
+> Honeypot-Rezepte, Job-Scheduler, optionaler Splunk-HEC-Adapter.
+> Siehe Abschnitt „🐜 Vision".
 
 ## Schnellstart (neu hier?)
 
@@ -68,6 +70,11 @@ Es tritt **keiner** externen Plattform (HackerOne, Bugcrowd, …) bei und führt
   - **Arbeiter-Ameisen** (gemeinsame Basisklasse `AntAgent`):
     `ReconAnt`, `ScanningAnt`, `ApiAnt`, `InfraAnt`, `FuzzAnt`,
     `AnalysisAnt`, `PocAnt`, `ReportingAnt`.
+- **Blue Queen / Verteidigungs-Kolonie** (`antbb/blue_queen.py`,
+  `antbb/agents/blue/`): Pendant zur offensiven Königin – plant und
+  dispatcht Blue-Team-Soldaten in den Phasen **Assess → Harden → Defend →
+  Remediate → Verify**. Standard rein lesend/non-destruktiv; aktive Fixes
+  und Honeypot-Starts nur oversight-gated. GUI unter `/blue`.
 - **Reports** (`antbb/reports.py`): 8-Schritt-Evidence-Kette + CVSS,
   Speicherung als JSON im Store, Export nach Markdown/JSON.
 
@@ -284,6 +291,10 @@ Umgesetzt:
   Nur eigene/erlaubte Umgebung, keine Angriffe; ohne Scan (Rechte/Adapter) ein
   **ehrlicher Hinweis statt Fake-Daten**. Smoke-Test: `smoke_test_wlan_heatmap.py`.
 
+- ✅ **Blue Queen** (Verteidigungs-Kolonie): Orchestrator + 5 Blue-Soldaten,
+  Job-Scheduler, Splunk-Adapter (optional), Remediation-Verify
+  („nachweislich geschlossen"), GUI unter `/blue`.
+
 Offen / Ideen:
 
 - Weitere LLM-Adapter und Feinschliff der Router-Heuristiken.
@@ -403,6 +414,22 @@ antbb beginnt mit **einem** Volk — der offensiven Königin und ihren Spähern,
 
 **Das Blue-Team-Volk.** Neben die angreifende Königin tritt eine **verteidigende Königin** mit ihrem eigenen Ameisenvolk: Härtungs-Ameisen, die Funde direkt in Fixes übersetzen, Wächter-Ameisen, die Erreichbarkeit und Veränderungen überwachen, und Sanitäter-Ameisen, die aus jedem Angriff eine konkrete Gegenmaßnahme bauen. Was das rote Volk findet, verschließt das blaue Volk — im selben Bau, mit demselben Gedächtnis.
 
+### Blue Queen – was schon steht
+
+| Modul | Status | Beschreibung |
+|---|---|---|
+| `blue-swscan` | **echt** | Software-Inventar (dpkg/rpm/pip) + optionaler OSV-CVE-Abgleich |
+| `blue-hardening` | **echt (read-only)** | CIS-artige Checks (SSH, Firewall, Dateirechte, sysctl) + Fix-Vorschläge |
+| `blue-remediation` | **echt (read-only)** | Finding→Fix-Pipeline; Re-Check belegt „nachweislich geschlossen" |
+| `blue-defense` | Scaffold + Regeln | Detection-Regeln (Sigma-artig); optional Splunk-HEC |
+| `blue-honeypot` | Scaffold + Doku | Sichere Decoy-Rezepte; Start nur oversight-gated |
+| Job-Scheduler | **echt** | Wiederholbare Jobs (`swscan`/`hardening`/`remediate`/`colony`) in DB |
+| Splunk-Adapter | **optional** | HEC via ENV (`ANTBB_SPLUNK_HEC_URL`/`_TOKEN`); ohne Config übersprungen |
+
+„Nachweislich geschlossen" = rein lesender Re-Check mit Vorher/Nachher-Evidence
+über das bestehende Proof-Gate (analog zur offensiven `VERIFIZIERT`-Logik).
+
+
 **Das Reverse-Engineering-Volk.** Ein drittes Volk gräbt tiefer: Zerleger-Ameisen, die Binärdateien, Firmware und Protokolle auseinandernehmen, Spuren-Ameisen, die Logik rekonstruieren, und Übersetzer-Ameisen, die aus rohem Code verständliche Erkenntnis machen. Sie verstehen, *wie* Dinge gebaut sind — damit die anderen Völker wissen, wo sie ansetzen.
 
 **Die Verschmelzung.** Jedes Volk hat heute seinen eigenen Bau. Die Vision ist, dass die Völker nicht nebeneinander leben, sondern **zu einer einzigen Plattform verschmelzen**: ein gemeinsames Gedächtnis, in dem jede Ameise vom Wissen aller anderen lernt. Der Angreifer weiß, was der Verteidiger gehärtet hat; der Verteidiger weiß, was der Zerleger entdeckt hat; der Zerleger weiß, wonach der Angreifer sucht. Ein Schwarm, viele Kasten, ein Bau.
@@ -411,10 +438,10 @@ Verspielt im Auftritt — lebendige Ameisen, die über den Bildschirm wuseln —
 
 ## Roadmap / noch nicht enthalten
 
-- **Blue Queen (Verteidigungs-Königin):** noch **nicht gebaut**, folgt als
-  separater Job (u. a. lokaler, nicht-destruktiver CVE-Lab-Fall mit Detection +
-  automatischem Fix und Vorher/Nachher-Nachweis). In dieser ZIP ist **kein**
-  Blue-Queen-Code enthalten und es wird keiner vorgetäuscht.
+- **Blue Queen – Feinschliff:** Grundgerüst ist gebaut (siehe Vision). Offen:
+  automatisches Fix-Apply (weiterhin oversight-gated), erweiterte Detection-
+  Integrationen, Honeypot-Deploy jenseits der Doku, CVE-Lab-Fall als Demo.
+- **Reverse-Engineering-Kolonie:** noch nicht gebaut.
 
 ## Screenshots (nur Repo)
 

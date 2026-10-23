@@ -292,12 +292,38 @@
     host.innerHTML = h;
   }
 
+
+  function renderBluePhases(reg) {
+    const host = document.getElementById("octogent-phases");
+    if (!host) return;
+    const phases = reg.blue_phases || ["assess","harden","defend","remediate","verify"];
+    const labels = {assess:"Assess", harden:"Harden", defend:"Defend",
+                    remediate:"Remediate", verify:"Verify"};
+    host.innerHTML = '<div class="phase-row">' + phases.map(ph =>
+      '<div class="phase-chip blue"><b>' + (labels[ph]||ph) + '</b></div>').join("") + "</div>"
+      + '<p class="hint">Verteidigungs-Phasen der Blue Queen (Assess → Harden → Defend → Remediate → Verify).</p>';
+  }
+
   api("/api/soldiers").then(reg => {
     REG = reg;
     root.innerHTML = "";
-    renderPhases(reg);
-    (reg.soldiers||[]).forEach(card);
+    const colony = (window.ANTBB_COLONY || "").toLowerCase();
+    let list = (reg.soldiers||[]);
+    if (colony === "blue") {
+      list = list.filter(s => s.colony === "blue" || (s.name||"").startsWith("blue-"));
+      renderBluePhases(reg);
+    } else {
+      list = list.filter(s => s.colony !== "blue" && !(s.name||"").startsWith("blue-"));
+      renderPhases(reg);
+    }
+    REG.soldiers = list;
+    list.forEach(card);
     const sum = document.getElementById("soldier-summary");
-    if (sum) sum.textContent = `${reg.soldier_count} Soldaten · ${reg.playbook_count} Playbooks · ${reg.task_count} Aufgaben`;
+    if (sum) {
+      const pbs = list.reduce((n,s)=>n+(s.playbooks||[]).length,0);
+      const tasks = list.reduce((n,s)=>n+((s.skill&&s.skill.task_count)||0),0);
+      sum.textContent = list.length + " Soldaten · " + pbs + " Playbooks · " + tasks + " Aufgaben"
+        + (colony === "blue" ? " · 🛡 Blue Queen" : "");
+    }
   }).catch(e => { root.innerHTML = "<p class='blocked'>Fehler beim Laden der Soldaten.</p>"; });
 })();

@@ -15,6 +15,7 @@ import time
 from typing import Optional
 
 from .agents import WORKER_AGENTS
+from .agents.blue import BLUE_AGENTS, BLUE_PHASES
 
 _SECRET_MARKERS = ("api_key", "apikey", "token", "secret", "password", "minimax")
 
@@ -210,6 +211,23 @@ TASK_CATALOG: dict[str, list[str]] = {
                             "Rogue-AP + Captive-Portal zeitbegrenzt (operator-getrieben)",
                             "Credentials nur als Nachweis (maskiert/gehasht)",
                             "Auto-Purge nach Report"],
+    # --- blue queen ---
+    "sw-inventory": ["Paketmanager rein lesend abfragen (dpkg/rpm/pip)",
+                     "Paketname+Version erfassen", "keine Secrets"],
+    "sw-cve-match-osv": ["Inventar gegen OSV abgleichen", "CVE-IDs nur aus OSV übernehmen",
+                         "nie erfundene Schwachstellen"],
+    "hardening-audit": ["SSH-Config prüfen", "Firewall-Status prüfen",
+                        "world-writable Dateien in /etc finden", "sysctl-Härtung prüfen"],
+    "hardening-apply": ["Fix-Vorschlag NUR mit Oversight anwenden (default-deny)",
+                        "nie automatisch ohne Freigabe"],
+    "detection-ruleset": ["Detection-Regeln bereitstellen", "Quellen zuordnen"],
+    "splunk-forward": ["Events an HEC spiegeln wenn konfiguriert",
+                       "ohne Config sauber überspringen"],
+    "remediation-plan": ["Finding→Fix-Schritt ableiten", "konkreten Behebungsschritt vorschlagen"],
+    "remediation-verify": ["rein lesender Re-Check", "Vorher/Nachher-Evidence",
+                           "nachweislich geschlossen belegen"],
+    "honeypot-recipes": ["sichere Decoy-Rezepte dokumentieren"],
+    "honeypot-deploy": ["Decoy NUR mit Oversight starten (default-deny, Scaffold)"]
 }
 
 
@@ -224,8 +242,9 @@ def _tasks_for(pb: dict) -> list[dict]:
              "oversight": bool(pb.get("oversight_required"))} for t in items]
 
 
-def build_registry(agents=None) -> dict:
-    agents = agents if agents is not None else WORKER_AGENTS
+def build_registry(agents=None, include_blue: bool = True) -> dict:
+    if agents is None:
+        agents = list(WORKER_AGENTS) + (list(BLUE_AGENTS) if include_blue else [])
     soldiers = []
     pb_count = 0
     tool_count = 0
@@ -291,6 +310,8 @@ def build_registry(agents=None) -> dict:
         "wordlists": wl_status,
         "plugins": plugins_block,
         "octogent_phases": OCTOGENT_PHASES,
+        "blue_phases": list(BLUE_PHASES),
+        "blue_soldier_count": sum(1 for s in soldiers if s.get("colony") == "blue"),
         "scope_suggestions": SCOPE_SUGGESTIONS,
         "prompt_categories": list(__import__("antbb.prompts", fromlist=["PROMPT_TEMPLATES"]).PROMPT_TEMPLATES),
     }

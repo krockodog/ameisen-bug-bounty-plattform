@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Blue Queen · Verteidigungs-Kolonie · antbb{% endblock %}
+{% block content %}
+<p><a href="/">← zurück</a></p>
+<h2>🛡 Blue Queen – Verteidigungs-Kolonie
+  <small>nachhaltiger Schutz · human-oversight · scope-gebunden</small>
+</h2>
+<pre class="notice">Die Blaue Königin orchestriert die Verteidigungs-Ameisen in den Phasen
+Assess → Harden → Defend → Remediate → Verify. Standard: rein lesend /
+non-destruktiv. Aktive Fixes und Honeypot-Starts nur mit Oversight-Freigabe.
+„Nachweislich geschlossen" = Re-Check mit Vorher/Nachher-Evidence (Proof-Gate).</pre>
+
+<section class="card">
+  <h3>Kolonie starten <small>read-only Default</small></h3>
+  <form id="blue-run-form" class="inline">
+    <label>Ziel (optional)
+      <select name="target_id" id="blue-target">
+        <option value="">localhost (lokales System)</option>
+        {% for t in targets %}
+        <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label style="font-weight:bold">
+      <input type="checkbox" name="apply_fixes" id="blue-apply" value="1">
+      Aktive Fixes / Honeypot-Start (Oversight)
+    </label>
+    <label id="blue-ack-wrap" style="display:none;font-weight:bold">
+      <input type="checkbox" name="oversight_ack" id="blue-ack" value="1">
+      ✅ Human Oversight: ich bestätige die Freigabe aktiver Verteidigungs-Aktionen
+    </label>
+    <button type="submit">🐜🛡 Kolonie starten</button>
+  </form>
+  <pre id="blue-run-log" class="feed" style="max-height:220px;overflow:auto"></pre>
+</section>
+
+<section class="card" id="soldier-section">
+  <h3>🛡 Blue-Soldaten · Skills &amp; Playbooks
+    <small id="soldier-summary">lädt…</small>
+  </h3>
+  <input type="text" id="soldier-filter" placeholder="Blue-Soldaten / Skills / Aufgaben durchsuchen…"
+         style="max-width:420px;margin:.3rem 0;">
+  <div id="octogent-phases"></div>
+  <div id="soldier-cards">lädt…</div>
+</section>
+
+<section class="card">
+  <h3>⏱ Wiederholbare Jobs</h3>
+  <p class="hint">Automatisch wiederkehrende Checks (Software-Scan, Hardening-Audit,
+     Remediation-Verify, voller Colony-Lauf). Non-destruktiv; aktive Fixes bleiben gated.</p>
+  <form id="blue-job-form" class="inline">
+    <input name="name" required placeholder="Name (z.B. nightly-swscan)">
+    <select name="kind">
+      <option value="swscan">Software-/Versions-Scan</option>
+      <option value="hardening">Hardening-Audit</option>
+      <option value="remediate">Remediation-Verify</option>
+      <option value="colony">Voller Colony-Lauf</option>
+    </select>
+    <input name="interval_sec" type="number" value="86400" style="width:8rem" title="Intervall in Sekunden">
+    <button type="submit">+ Job anlegen</button>
+  </form>
+  <table id="blue-jobs-table">
+    <thead><tr><th>ID</th><th>Name</th><th>Art</th><th>Intervall</th><th>Zuletzt</th><th>Aktionen</th></tr></thead>
+    <tbody>
+    {% for j in jobs %}
+      <tr data-id="{{ j.id }}">
+        <td>{{ j.id }}</td>
+        <td>{{ j.name }}</td>
+        <td><code>{{ j.kind }}</code></td>
+        <td>{{ j.interval_sec }}s</td>
+        <td>{{ j.last_run_label }}</td>
+        <td>
+          <button type="button" class="blue-job-run" data-id="{{ j.id }}">jetzt ausführen</button>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6">Noch keine Jobs angelegt.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <h4>Letzte Job-Läufe</h4>
+  <ul id="blue-job-runs">
+  {% for r in job_runs %}
+    <li>#{{ r.job_id }} · {{ r.status }} · findings={{ r.finding_count }} ·
+        geschlossen={{ r.closed_count }} · <code>{{ r.run_id }}</code></li>
+  {% else %}
+    <li>Noch keine Job-Läufe.</li>
+  {% endfor %}
+  </ul>
+</section>
+
+<section class="card">
+  <h3>📡 Splunk (free/green) – optional</h3>
+  {% if splunk.configured %}
+  <p class="ok">HEC konfiguriert (URL gesetzt, Token gesetzt). Index: {{ splunk.index or '—' }} ·
+     sourcetype: {{ splunk.sourcetype }}</p>
+  {% else %}
+  <p class="hint">Nicht konfiguriert – Weiterleitung wird sauber übersprungen.
+     Setze <code>ANTBB_SPLUNK_HEC_URL</code> und <code>ANTBB_SPLUNK_HEC_TOKEN</code> (ENV),
+     optional <code>ANTBB_SPLUNK_INDEX</code> / <code>ANTBB_SPLUNK_SOURCETYPE</code>.</p>
+  {% endif %}
+</section>
+
+<script>window.ANTBB_COLONY = "blue";</script>
+<script src="/static/soldiers.js"></script>
+<script src="/static/blue.js"></script>
+{% endblock %}

@@ -539,3 +539,9 @@ button.wlan-queen-btn { background: linear-gradient(135deg,#3a5fd0,#6a3fd0); bor
 .wlan-heat-schwach { background:#e0a022; }
 .wlan-heat-funkloch { background:#f85149; color:#fff; }
 .wlan-heat-count { margin-left:auto; color:var(--glow); font-variant-numeric:tabular-nums; }
+
+
+/* ---- Blue Queen ---- */
+.phase-chip.blue { border-color:#2a5a8a; color:#7ec8ff; background:#0a1524; }
+#blue-run-log.feed { background:#0a0d16; border:1px solid #1d2740; padding:.6rem;
+  font-family: ui-monospace, monospace; font-size:.82rem; color:#c9d4e6; }
