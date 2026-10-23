@@ -1,8 +1,9 @@
 """Neuronales Gehirn der Königin — Node-/Log-Lesezugriff + HUMAN-ONLY
 Lösch-/Reset-Operationen.
 
+Scope: nur die OFFENSIVE Kolonie (Pentest/Bugbounty/WLAN).
 Blue Queen (colony=blue) hat eine eigene Ansicht unter /blue und erscheint
-nicht im Brain-Graph.
+hier weder als Soldat noch als Fund noch als Lauf.
 
 ================================ WICHTIG =================================
 Die LÖSCH- und RESET-Funktionen in diesem Modul sind AUSSCHLIESSLICH für
@@ -45,6 +46,7 @@ class HumanConfirmError(PermissionError):
     menschliches Bestätigungs-Flag versucht wird (default-deny)."""
 
 
+
 def _is_blue_agent(name: Optional[str]) -> bool:
     """Blue-Queen-Soldaten (colony=blue) – gehören NICHT ins Neuronale Gehirn."""
     n = (name or "").strip().lower()
@@ -55,7 +57,6 @@ def _is_blue_run_id(run_id: Optional[str]) -> bool:
     """Blue-Queen-Läufe (run_id blue-…) – eigene Ansicht /blue, nicht /brain."""
     r = (run_id or "").strip().lower()
     return r.startswith("blue-") or r.startswith("blue_")
-
 
 
 def _audit_path(store: Store) -> str:
@@ -178,7 +179,7 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
     # Findings (gekappt pro Aufruf für vernünftige Payload)
     sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     soldier_seen: set[str] = set()
-    # Brain = offensive Kolonie. Blue Queen bleibt unter /blue.
+    # Brain = nur offensive Kolonie. Blue-Queen-Funde/Soldaten bleiben unter /blue.
     all_findings = [f for f in store.list_findings()
                     if not _is_blue_agent(f["agent"])
                     and not _is_blue_run_id(f["run_id"] if "run_id" in f.keys() else None)]
@@ -198,7 +199,7 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
         edges.append({"from": snid, "to": nid, "kind": "soldier-finding"})
         soldier_seen.add(agent)
 
-    # Soldaten/Capabilities — Blue Queen (colony=blue) hat eigene Ansicht /blue.
+    # Soldaten/Capabilities aus der Registry (aktive Fähigkeiten der Königin)
     try:
         reg = registry_mod.build_registry(include_blue=False)
         for s in reg.get("soldiers", []):
@@ -283,7 +284,9 @@ def node_detail(store: Store, ntype: str, nid: str) -> dict:
         findings = [f for f in store.list_findings()
                     if (f["agent"] or "") == nid and not _is_blue_run_id(
                         f["run_id"] if "run_id" in f.keys() else None)]
-        # Playbooks + SKILL.md aus der Capability-Registry.
+        # Playbooks + SKILL.md aus der Capability-Registry (Single Source of Truth).
+        # Ohne diese Anreicherung sah die Brain-Detailansicht nur Funde — Judith
+        # meldete „keinerlei Playbooks einsehbar“.
         role = specialty = ""
         colony = None
         playbooks: list = []
