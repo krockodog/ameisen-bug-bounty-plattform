@@ -33,10 +33,27 @@
     wenn er aktiv nachgewiesen wurde – alles andere bleibt „Verdacht" oder „zu bestätigen".
   </p>
 
-  <div class="didyouknow">
+  <div class="didyouknow" id="dyk-box">
+    <div class="dyk-ants-rail" aria-hidden="true">
+      <span class="dyk-walker dyk-w1"></span>
+      <span class="dyk-walker dyk-w2"></span>
+      <span class="dyk-walker dyk-w3"></span>
+    </div>
     <span class="dyk-ant">🐜</span>
-    <span><b>Wusstest du?</b> <span id="dyk-fact">Lädt …</span></span>
+    <span class="dyk-label" id="dyk-label">Neueste Schwachstellen</span>
+    <div class="dyk-ticker" id="dyk-ticker" aria-live="polite">
+      <div class="dyk-track" id="dyk-track"><span id="dyk-fact">Lädt …</span></div>
+    </div>
   </div>
+  <details class="dyk-list-card card" id="dyk-list-card">
+    <summary>
+      <span id="dyk-list-title">🐜 Späher-Meldungen · Neueste Schwachstellen</span>
+      <span class="hint" id="dyk-list-meta"></span>
+    </summary>
+    <ul class="dyk-list" id="dyk-list">
+      <li class="hint">Lädt …</li>
+    </ul>
+  </details>
 </section>
 
 <section class="card mode-card" id="fernzugriff">
@@ -197,27 +214,141 @@
 </section>
 
 <script>
-// Wusstest du? – echte, gängige Infosec-Fakten (keine Erfindungen), rotierend.
+// Startseiten-Laufschrift + sichtbare Liste: ECHTE neueste Schwachstellen
+// (NVD + oeffentliche Mastodon-Infosec-Konten) via /api/dyk.
+// Robust: Timeout, bei Fehler/Netzausfall Fallback auf statische Infosec-Fakten
+// – nie dauerhaft "Laedt ...". Optik folgt dem bestehenden antbb-Theme.
 (function () {
-  var facts = [
-    "Platz 1 der <b>OWASP Top 10 (2021)</b> ist <b>Broken Access Control</b> – also fehlerhafte Zugriffskontrolle. Deshalb prüfen unsere Soldaten besonders, wer worauf zugreifen darf.",
-    "Ein <b>WPA2-Handshake</b> ist der 4-Wege-Austausch, mit dem sich ein Gerät beim WLAN anmeldet. Wird er mitgeschnitten, kann ein Passwort <b>offline</b> geraten werden – ganz ohne weiteren Funkkontakt. Darum sind starke, lange Passphrasen so wichtig.",
-    "<b>Default-deny</b> heißt: erlaubt ist nur, was ausdrücklich freigegeben wurde. Das verhindert, dass versehentlich fremde Systeme getestet werden – die sicherste Grundeinstellung für jeden Scope.",
-    "Laut Verizon DBIR ist der <b>Mensch</b> an der großen Mehrheit der Sicherheitsvorfälle beteiligt – etwa über Phishing oder schwache bzw. gestohlene Passwörter. Technik allein reicht nicht.",
-    "<b>HTTPS/TLS</b> schützt den Transportweg (das Mitlesen unterwegs), aber nicht die Anwendung selbst. Eine Seite kann verschlüsselt und trotzdem verwundbar sein.",
-    "<b>SQL-Injection</b> gehört zur OWASP-Kategorie <b>Injection</b> und entsteht, wenn Eingaben ungeprüft in Datenbankabfragen landen. Schutz: parametrisierte Abfragen (Prepared Statements).",
-    "<b>Multi-Faktor-Authentifizierung (MFA)</b> stoppt den Großteil der Angriffe auf gestohlene Passwörter, weil ein geklautes Passwort allein nicht mehr genügt.",
-    "Ein guter Pentest-Befund braucht einen <b>Nachweis</b>. Unser Proof-Gate führt etwas erst als „VERIFIZIERT", wenn es aktiv belegt ist – das verhindert Fehlalarme und übertriebene Risiko-Einstufungen."
+  var fallbackFacts = [
+    "Platz 1 der <b>OWASP Top 10 (2021)</b> ist <b>Broken Access Control</b> \u2013 also fehlerhafte Zugriffskontrolle. Deshalb pr\u00fcfen unsere Soldaten besonders, wer worauf zugreifen darf.",
+    "Ein <b>WPA2-Handshake</b> ist der 4-Wege-Austausch, mit dem sich ein Ger\u00e4t beim WLAN anmeldet. Wird er mitgeschnitten, kann ein Passwort <b>offline</b> geraten werden \u2013 ganz ohne weiteren Funkkontakt. Darum sind starke, lange Passphrasen so wichtig.",
+    "<b>Default-deny</b> hei\u00dft: erlaubt ist nur, was ausdr\u00fccklich freigegeben wurde. Das verhindert, dass versehentlich fremde Systeme getestet werden \u2013 die sicherste Grundeinstellung f\u00fcr jeden Scope.",
+    "Laut Verizon DBIR ist der <b>Mensch</b> an der gro\u00dfen Mehrheit der Sicherheitsvorf\u00e4lle beteiligt \u2013 etwa \u00fcber Phishing oder schwache bzw. gestohlene Passw\u00f6rter. Technik allein reicht nicht.",
+    "<b>HTTPS/TLS</b> sch\u00fctzt den Transportweg (das Mitlesen unterwegs), aber nicht die Anwendung selbst. Eine Seite kann verschl\u00fcsselt und trotzdem verwundbar sein.",
+    "<b>SQL-Injection</b> geh\u00f6rt zur OWASP-Kategorie <b>Injection</b> und entsteht, wenn Eingaben ungepr\u00fcft in Datenbankabfragen landen. Schutz: parametrisierte Abfragen (Prepared Statements).",
+    "<b>Multi-Faktor-Authentifizierung (MFA)</b> stoppt den Gro\u00dfteil der Angriffe auf gestohlene Passw\u00f6rter, weil ein geklautes Passwort allein nicht mehr gen\u00fcgt.",
+    "Ein guter Pentest-Befund braucht einen <b>Nachweis</b>. Unser Proof-Gate f\u00fchrt etwas erst als \u201eVERIFIZIERT\u201c, wenn es aktiv belegt ist \u2013 das verhindert Fehlalarme und \u00fcbertriebene Risiko-Einstufungen."
   ];
-  var el = document.getElementById("dyk-fact");
-  if (!el) return;
-  var i = Math.floor(Math.random() * facts.length);
-  function show() { el.innerHTML = facts[i]; el.style.opacity = 1; }
-  show();
-  setInterval(function () {
-    el.style.opacity = 0;
-    setTimeout(function () { i = (i + 1) % facts.length; show(); }, 400);
-  }, 9000);
+
+  var track = document.getElementById("dyk-track");
+  var label = document.getElementById("dyk-label");
+  var listEl = document.getElementById("dyk-list");
+  var listTitle = document.getElementById("dyk-list-title");
+  var listMeta = document.getElementById("dyk-list-meta");
+  if (!track) return;
+
+  function esc(str) {
+    var d = document.createElement("div");
+    d.textContent = (str == null ? "" : String(str));
+    return d.innerHTML;
+  }
+  function sevBadge(sev) {
+    if (!sev) return "";
+    var s = String(sev).toUpperCase();
+    return ' <span class="dyk-sev dyk-sev-' + esc(s) + '">' + esc(s) + "</span>";
+  }
+  function fmtDate(iso) {
+    if (!iso) return "";
+    try {
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("de-DE", { year: "numeric", month: "2-digit", day: "2-digit" });
+    } catch (e) { return ""; }
+  }
+
+  function itemHtml(it) {
+    if (it.kind === "cve") {
+      var cid = it.url
+        ? '<a href="' + esc(it.url) + '" target="_blank" rel="noopener"><b>' + esc(it.id) + "</b></a>"
+        : "<b>" + esc(it.id) + "</b>";
+      return "\ud83d\udd12 " + cid + sevBadge(it.severity) + " \u2013 " + esc(it.text);
+    }
+    var who = it.author ? "<b>" + esc(it.author) + "</b>: " : "";
+    var tag = it.id ? (" <code>" + esc(it.id) + "</code>") : "";
+    var txt = it.url
+      ? '<a href="' + esc(it.url) + '" target="_blank" rel="noopener">' + esc(it.text) + "</a>"
+      : esc(it.text);
+    return "\ud83d\udcac " + who + tag + sevBadge(it.severity) + " \u2013 " + txt;
+  }
+
+  function renderTicker(htmlItems) {
+    var sep = '<span class="dyk-sep">\u2022</span>';
+    var seq = htmlItems.join(sep);
+    track.innerHTML = '<span class="dyk-seq">' + seq + sep + seq + "</span>";
+    var dur = Math.max(20, htmlItems.length * 7);
+    track.style.animation = "dyk-scroll " + dur + "s linear infinite";
+  }
+
+  function renderList(items, isFallback) {
+    if (!listEl) return;
+    if (isFallback) {
+      if (listTitle) listTitle.textContent = "\ud83d\udc1c Wusstest du? \u00b7 Wissen der K\u00f6nigin";
+      if (listMeta) listMeta.textContent = "Quellen offline \u2013 Fallback";
+      listEl.innerHTML = items.map(function (f) {
+        return '<li class="dyk-li"><div class="dyk-li-text">' + f + "</div></li>";
+      }).join("");
+      return;
+    }
+    if (listTitle) listTitle.textContent = "\ud83d\udc1c Sp\u00e4her-Meldungen \u00b7 Neueste Schwachstellen";
+    if (listMeta) listMeta.textContent = items.length + " Eintr\u00e4ge";
+    listEl.innerHTML = items.map(function (it) {
+      var who = it.kind === "cve"
+        ? ("NVD \u00b7 " + esc(it.id || "CVE"))
+        : esc(it.author || it.source || "Mastodon");
+      var tag = it.id && it.kind !== "cve" ? (' <code>' + esc(it.id) + "</code>") : "";
+      var link = it.url
+        ? (' <a class="dyk-li-link" href="' + esc(it.url) + '" target="_blank" rel="noopener">\u2192 Quelle</a>')
+        : "";
+      var when = fmtDate(it.date);
+      return '<li class="dyk-li">'
+        + '<div class="dyk-li-head">'
+        +   '<span class="dyk-li-author">' + who + "</span>"
+        +   tag + sevBadge(it.severity)
+        +   (when ? (' <span class="hint">' + esc(when) + "</span>") : "")
+        +   link
+        + "</div>"
+        + '<div class="dyk-li-text">' + esc(it.text) + "</div>"
+        + "</li>";
+    }).join("");
+  }
+
+  function useFallback() {
+    if (label) label.textContent = "Wusstest du?";
+    renderTicker(fallbackFacts.slice());
+    renderList(fallbackFacts, true);
+  }
+  function useFeed(items, sources) {
+    if (label) label.textContent = "Neueste Schwachstellen";
+    renderTicker(items.map(itemHtml));
+    renderList(items, false);
+    if (listMeta && sources && sources.length) {
+      listMeta.textContent = items.length + " Eintr\u00e4ge \u00b7 " + sources.join(" + ");
+    }
+  }
+
+  var done = false;
+  var timer = setTimeout(function () {
+    if (!done) { done = true; useFallback(); }
+  }, 7000);
+  var ctrl = ("AbortController" in window) ? new AbortController() : null;
+  if (ctrl) setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 7000);
+
+  fetch("/api/dyk", { signal: ctrl ? ctrl.signal : undefined })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (data) {
+      if (done) return;
+      done = true; clearTimeout(timer);
+      if (data && data.ok && data.items && data.items.length) {
+        useFeed(data.items, data.sources || []);
+      } else {
+        useFallback();
+      }
+    })
+    .catch(function () {
+      if (done) return;
+      done = true; clearTimeout(timer);
+      useFallback();
+    });
 })();
 </script>
 {% endblock %}

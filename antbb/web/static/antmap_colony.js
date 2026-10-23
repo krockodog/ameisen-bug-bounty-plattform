@@ -40,6 +40,12 @@
     imgCache[base] = im; return im;
   }
 
+  // ---- Ameisen-Sprite fuer die Tunnel-Laeufer (vorhandenes Scout-Asset) ----
+  const antSprite = new Image(); antSprite.decoding = "async";
+  antSprite.src = "/static/sprites/scout_tq.png";
+  let antSpriteReady = false;
+  antSprite.onload = function () { antSpriteReady = true; };
+
   const SEVCOL = {
     critical: [255, 86, 86], high: [255, 150, 60], medium: [255, 206, 112],
     low: [120, 200, 255], info: [150, 230, 190]
@@ -282,20 +288,54 @@
 
   // ---- FX: Pheromon-Spur entlang des Tunnels -----------------------------
   function pheromone(snap, ctrl, t) {
+    // Statt schlichter Kleckse: kleine Ameisen, die entlang des Tunnels ZUM ZIEL
+    // laufen (offensiv magenta, defensiv cyan). Ausrichtung = Bewegungsrichtung,
+    // leichte Lauf-Oszillation. Nutzt das vorhandene Scout-Sprite; Fallback auf
+    // Punkte, falls das Bild (noch) nicht geladen ist. Performant: wenige Laeufer.
     const tu = snap.stage.tunnel;
     const off = (snap.effective) === "offensive";
     const col = off ? [255, 61, 240] : [56, 224, 255];
     const np = 7;
-    for (let i = 0; i < np; i++) {
-      let u = ((t * 0.16 + i / np) % 1);
-      if (REDUCED) u = (i + 0.5) / np;
+    // Quadratische Bezier: B(u) und Tangente B'(u) fuer die Ausrichtung.
+    function bez(u) {
       const om = 1 - u;
-      const px = om * om * tu.x1 + 2 * om * u * ctrl.cx + u * u * tu.x2;
-      const py = om * om * tu.y1 + 2 * om * u * ctrl.cy + u * u * tu.y2;
+      return {
+        x: om * om * tu.x1 + 2 * om * u * ctrl.cx + u * u * tu.x2,
+        y: om * om * tu.y1 + 2 * om * u * ctrl.cy + u * u * tu.y2
+      };
+    }
+    function tangent(u) {
+      const dx = 2 * (1 - u) * (ctrl.cx - tu.x1) + 2 * u * (tu.x2 - ctrl.cx);
+      const dy = 2 * (1 - u) * (ctrl.cy - tu.y1) + 2 * u * (tu.y2 - ctrl.cy);
+      return Math.atan2(dy, dx);
+    }
+    for (let i = 0; i < np; i++) {
+      let u = ((t * 0.16 + i / np) % 1);     // wandert Richtung Ziel (u: 0 -> 1)
+      if (REDUCED) u = (i + 0.5) / np;
+      const pt = bez(u);
       const a = 0.5 + 0.4 * Math.sin((u + i) * 3);
-      glow(fctx, px, py, 9, col, 0.4 * a);
-      fctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + (0.8 * a).toFixed(2) + ")";
-      fctx.beginPath(); fctx.arc(px, py, 1.8, 0, Math.PI * 2); fctx.fill();
+      // weicher Pheromon-Schimmer unter der Ameise (dezent)
+      glow(fctx, pt.x, pt.y, 8, col, 0.28 * a);
+      if (antSpriteReady && !REDUCED) {
+        const ang = tangent(u);
+        // leichte Lauf-Oszillation (Koerper-Wackeln) + Groesse
+        const wob = Math.sin(t * 12 + i * 1.7) * 0.12;
+        const sz = 15;
+        fctx.save();
+        fctx.translate(pt.x, pt.y);
+        fctx.rotate(ang + Math.PI / 2 + wob); // Sprite zeigt nach "oben" -> +90deg
+        fctx.globalAlpha = 0.7 + 0.25 * a;
+        // leichte Tonung Richtung Modus-Farbe ueber Schatten
+        fctx.shadowColor = "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0.8)";
+        fctx.shadowBlur = 6;
+        fctx.drawImage(antSprite, -sz / 2, -sz / 2, sz, sz);
+        fctx.restore();
+        fctx.globalAlpha = 1;
+      } else {
+        // Fallback: Punkt (wie zuvor), falls Sprite nicht bereit / reduced-motion
+        fctx.fillStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + (0.8 * a).toFixed(2) + ")";
+        fctx.beginPath(); fctx.arc(pt.x, pt.y, 1.8, 0, Math.PI * 2); fctx.fill();
+      }
     }
   }
 

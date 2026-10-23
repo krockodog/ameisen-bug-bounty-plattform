@@ -432,6 +432,21 @@ def html_set_remote(mode: str = Form("off")):
     return RedirectResponse("/", status_code=303)
 
 
+@app.get("/api/dyk")
+def api_dyk(force: bool = False):
+    """Laufschrift-Feed: neueste Schwachstellen aus NVD + Mastodon (gecacht).
+
+    Liefert bei Fehler/Netzausfall ok=False -> Frontend nutzt statische Fakten.
+    Wirft bewusst keine Exceptions nach aussen (robuster Lade-Pfad).
+    """
+    try:
+        from .. import threatfeed
+        return JSONResponse(threatfeed.get_feed(force=force))
+    except Exception as exc:  # pragma: no cover - defensiver Schutz
+        return JSONResponse({"ok": False, "items": [], "sources": [],
+                             "reason": type(exc).__name__})
+
+
 @app.get("/api/remote")
 def api_remote_status():
     """Ehrlicher, rein lesender Fernzugriff-Status (JSON). Kein Secret."""

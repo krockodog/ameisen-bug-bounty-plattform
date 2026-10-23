@@ -270,3 +270,33 @@ scan:
       - /panel
     param_candidates: [q, s, search, query, id, page, file, path, lang, ref]
     param_markers: ["antbbFUZZ1", "../antbb", "antbb'\"<>"]
+
+
+# ── Startseiten-Laufschrift: "Neueste Schwachstellen" (Threat-Feed) ──────────
+# Speist die durchlaufende Laufschrift + Späher-Liste auf der Startseite aus
+# ECHTEN, öffentlichen Quellen (kein Login/Token). Server-seitig gecacht (TTL),
+# höflicher User-Agent, Timeout. Fällt alles aus -> Frontend zeigt statische
+# Infosec-Fakten (Fallback). Optik im Ameisen-/Schwarz-Theme.
+threatfeed:
+  enabled: true
+  cache_ttl_seconds: 10800     # 3h – respektiert NVD-/Instanz-Rate-Limits
+  http_timeout: 8.0
+  max_items: 30
+  nvd:
+    enabled: true
+    lookback_days: 7           # zuletzt veröffentlichte CVEs der letzten N Tage
+    results_per_page: 15
+  mastodon:
+    enabled: true
+    instance: mastodon.social  # öffentliche Hashtag-Timeline (kein Token nötig)
+    tags: [cve, vulnerability, infosec]
+    limit_per_tag: 10
+    # Öffentliche Infosec-/CVE-Konten (user@instanz) – Account-Timelines sind
+    # ohne Login abrufbar. Beliebig erweiterbar/ersetzbar.
+    accounts:
+      - cvedatabase@infosec.exchange    # CVEDatabase.com
+      - EUVD_Bot@mastodon.social        # EUVD (ENISA) – CVSS, Vendor, Datum
+      - shodansafari@infosec.exchange   # Shodan Safari
+      - urldna@infosec.exchange         # urlDNA.io
+      - securityfeed@infosec.exchange   # Security Feed (News-Digests)
+    limit_per_account: 6

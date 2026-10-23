@@ -378,12 +378,108 @@ button.wlan-pick:hover { background: rgba(80,120,210,.45); }
 
 .didyouknow {
   margin-top:1rem; background:#0b0d11; border:1px dashed rgba(210,153,34,.5);
-  border-radius:8px; padding:.7rem .9rem; font-size:.88rem; line-height:1.5;
-  display:flex; gap:.6rem; align-items:flex-start;
+  border-radius:8px; padding:.85rem .9rem .7rem; font-size:.88rem; line-height:1.5;
+  display:flex; gap:.6rem; align-items:flex-start; position:relative; overflow:hidden;
 }
 .didyouknow .dyk-ant { font-size:1.2rem; line-height:1; margin-top:.05rem; }
 .didyouknow b { color:var(--accent); }
 #dyk-fact { transition:opacity .4s ease; }
+
+/* ---- Laufschrift-Ticker + Liste: "Neueste Schwachstellen" ----
+   Optik strikt im bestehenden antbb-Theme (var(--card/--accent/--glow/--muted),
+   gleiche Card-Optik, Hover/Bloom). Keine fremden Farben/Fonts. */
+.didyouknow { align-items:center; }
+.dyk-label { color:var(--accent); font-weight:700; white-space:nowrap; flex:0 0 auto; }
+.dyk-ticker {
+  position:relative; overflow:hidden; flex:1 1 auto; min-width:0;
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+          mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+}
+.dyk-track { display:inline-block; white-space:nowrap; will-change:transform; }
+.dyk-track:hover { animation-play-state:paused; }
+.dyk-seq { display:inline-block; }
+.dyk-sep { color:var(--muted); margin:0 1.1rem; opacity:.7; }
+.dyk-ticker a { color:#79c0ff; text-decoration:none; }
+.dyk-ticker a:hover { text-decoration:underline; color:#ffffff;
+  text-shadow:0 0 10px rgba(56,224,255,.55); }
+.dyk-sev { font-size:.72rem; font-weight:700; padding:.03rem .32rem; border-radius:4px;
+  margin-left:.15rem; vertical-align:middle; background:#262a33; color:var(--muted); }
+/* Severity-Farben = bestehende .sev-* Palette (kein Octogent-Look) */
+.dyk-sev-CRITICAL { background:rgba(248,81,73,.18); color:#ff7b72;
+  box-shadow:0 0 10px rgba(248,81,73,.18); }
+.dyk-sev-HIGH     { background:rgba(240,136,62,.16); color:#f0883e; }
+.dyk-sev-MEDIUM   { background:rgba(210,153,34,.16); color:var(--accent); }
+.dyk-sev-LOW      { background:rgba(88,166,255,.14); color:#58a6ff; }
+@keyframes dyk-scroll {
+  from { transform:translateX(0); }
+  to   { transform:translateX(-50%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dyk-track { animation:none !important; white-space:normal; }
+}
+
+/* Sichtbare, ausklappbare Liste – gleiche Card-Optik wie der Rest der Startseite */
+.dyk-list-card {
+  margin-top:.55rem; padding:.55rem .9rem .7rem;
+  /* erbt .card (Gradient, Border, Bloom) – nur etwas kompakter */
+}
+.dyk-list-card > summary {
+  cursor:pointer; list-style:none; display:flex; gap:.7rem; align-items:baseline;
+  flex-wrap:wrap; color:var(--fg); font-weight:600; user-select:none;
+}
+.dyk-list-card > summary::-webkit-details-marker { display:none; }
+.dyk-list-card > summary::before {
+  content:"▸"; color:var(--glow); margin-right:.15rem;
+  text-shadow:0 0 8px rgba(56,224,255,.45);
+  transition:transform .15s ease;
+}
+.dyk-list-card[open] > summary::before { content:"▾"; }
+.dyk-list-card > summary:hover {
+  text-shadow:0 0 10px rgba(56,224,255,.35);
+}
+.dyk-list {
+  list-style:none; margin:.55rem 0 0; padding:0;
+  max-height:320px; overflow-y:auto;
+}
+.dyk-li {
+  position:relative; padding:.45rem .15rem .45rem 1.5rem; border-bottom:1px solid #262a33;
+  font-size:.85rem; line-height:1.4;
+}
+.dyk-li:last-child { border-bottom:none; }
+.dyk-li-head { display:flex; flex-wrap:wrap; gap:.35rem; align-items:center;
+  margin-bottom:.15rem; color:var(--fg); }
+.dyk-li-author { color:var(--accent); font-weight:600; }
+.dyk-li-text { color:var(--muted); }
+.dyk-li-link { color:#79c0ff; font-size:.8rem; margin-left:.2rem; }
+.dyk-li-link:hover { color:#ffffff; text-shadow:0 0 10px rgba(56,224,255,.55); }
+.dyk-li code { color:#79c0ff; }
+
+
+
+/* ---- Späher-Ameisen entlang der Laufschrift (dezent, performant) ----
+   Nutzt den vorhandenen Scout-Sprite; klein skaliert, opacity niedrig,
+   pointer-events:none – Lesbarkeit der CVEs bleibt ungestoert. */
+.dyk-ants-rail {
+  position:absolute; left:0; right:0; top:2px; height:16px;
+  pointer-events:none; overflow:hidden; z-index:1;
+}
+.dyk-walker {
+  position:absolute; top:0; left:-20px; width:16px; height:14px;
+  background:url("/static/sprites/scout_tq.png") center/contain no-repeat;
+  opacity:.55; filter:drop-shadow(0 0 3px rgba(210,153,34,.45));
+  will-change:left;
+}
+.dyk-w1 { animation: dyk-walk-box 18s linear infinite; }
+.dyk-w2 { animation: dyk-walk-box 26s linear infinite reverse; animation-delay:-8s; opacity:.4; top:1px; }
+.dyk-w3 { animation: dyk-walk-box 22s linear infinite; animation-delay:-14s; opacity:.35; width:13px; height:11px; }
+@keyframes dyk-walk-box {
+  from { left:-20px; }
+  to   { left:calc(100% + 4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dyk-walker { animation:none !important; display:none; }
+}
+
 
 /* ---- Papierkorb / Soft-Delete (Targets-Archiv) ---- */
 .trash-link { font-size: .6em; font-weight: 400; margin-left: .8em; opacity: .85; }
@@ -420,3 +516,7 @@ button.wlan-queen-btn { background: linear-gradient(135deg,#3a5fd0,#6a3fd0); bor
 .wlan-tabs .wtab[data-tab="scope"].active {
   background: rgba(60,140,100,.35); border-color: rgba(63,255,163,.45);
 }
+.dyk-li::before { content:"🐜"; position:absolute; left:.1rem; top:.45rem; font-size:.85rem;
+  opacity:.75; filter:drop-shadow(0 0 4px rgba(210,153,34,.35)); }
+.dyk-li:hover { background:rgba(56,224,255,.04); }
+.dyk-li:hover::before { opacity:1; filter:drop-shadow(0 0 6px rgba(56,224,255,.6)); }

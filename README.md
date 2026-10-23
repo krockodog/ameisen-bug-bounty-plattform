@@ -245,6 +245,14 @@ Umgesetzt:
   nur gegen ausdrücklich bestätigte **eigene** Assets (default-deny,
   oversight-gated).
 - ✅ Persistente Run-Historie + Export-Index in der UI (`/history`).
+- ✅ Startseiten-Laufschrift **„Neueste Schwachstellen"** (`GET /api/dyk`):
+  echte, aktuelle CVEs (NVD) und öffentliche Mastodon-Infosec-Posts
+  (Instanz/Hashtags/Konten in `config/default.yaml` konfigurierbar, kein Login)
+  als durchlaufende Laufschrift + ausklappbare Späher-Liste. Cache mit TTL;
+  bei Netzausfall sauberer Fallback auf statische Infosec-Fakten (nie dauerhaft
+  „Lädt …"). Optik im Ameisen-/Schwarz-Theme inkl. Scout-Ameisen entlang der
+  Laufschrift; im Kolonie-Tunnel laufen animierte Ameisen zum Ziel.
+
 
 Offen / Ideen:
 
