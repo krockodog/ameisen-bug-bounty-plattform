@@ -1858,6 +1858,167 @@ def api_runs(target_id: Optional[int] = None):
         out.append(d)
     return out
 
+@app.get("/api/runs/{key}/timeline")
+def api_run_timeline(key: str):
+    """Zeitraffer-Daten fuer EINEN echten Lauf (Pentest/Bugbounty/WLAN).
+
+    key = numerische run_history.id ODER run_id-String.
+    Liefert Run-Metadaten + chronologische Events aus scan_steps (falls vorhanden)
+    und Findings. Nichts erfunden: ohne Steps/Findings nur Start-/Ende-Marker
+    aus dem Run-Datensatz selbst.
+    """
+    import json as _json
+    # 1) Run aus Historie aufloesen
+    row = None
+    if key.isdigit():
+        try:
+            row = svc.store._conn.execute(
+                "SELECT * FROM run_history WHERE id=?", (int(key),)
+            ).fetchone()
+        except Exception:
+            row = None
+    if row is None:
+        try:
+            row = svc.store._conn.execute(
+                "SELECT * FROM run_history WHERE run_id=? "
+                "ORDER BY created_at DESC LIMIT 1", (key,)
+            ).fetchone()
+        except Exception:
+            row = None
+    if row is None:
+        raise HTTPException(404, "Lauf nicht gefunden.")
+    run = _rowdict(row)
+    run["when"] = _fmt_ts(run.get("created_at"))
+    rid = (run.get("run_id") or "").strip() or None
+    try:
+        sev = _json.loads(run.get("severity") or "{}")
+    except Exception:
+        sev = {}
+    run["severity"] = sev
+
+    # 2) Chronologische Events aus scan_steps + Findings (echt, nichts erfinden)
+    events: list[dict] = []
+    steps = []
+    if rid:
+        try:
+            steps = list(svc.store.list_scan_steps(rid))
+        except Exception:
+            steps = []
+    for st in steps:
+        sd = _rowdict(st)
+        try:
+            payload = _json.loads(sd.get("payload") or "{}")
+        except Exception:
+            payload = {}
+        events.append({
+            "t": sd.get("created_at") or 0,
+            "seq": sd.get("seq"),
+            "kind": sd.get("kind") or "event",
+            "phase": sd.get("phase") or "",
+            "agent": sd.get("agent") or "",
+            "title": (payload.get("title") or payload.get("message")
+                      or payload.get("status") or sd.get("kind") or "Schritt"),
+            "severity": payload.get("severity") or "",
+            "source": "scan_step",
+        })
+    findings = []
+    if rid:
+        try:
+            findings = list(svc.store.list_findings(run_id=rid))
+        except Exception:
+            findings = []
+    # Falls Findings noch nicht als Steps vorhanden: zusaetzlich aufnehmen
+    # (dedupe ueber title+agent+severity)
+    seen = {(e.get("title"), e.get("agent"), e.get("severity")) for e in events
+            if e.get("kind") == "finding"}
+    for f in findings:
+        fd = _rowdict(f)
+        key3 = (fd.get("title"), fd.get("agent"), fd.get("severity"))
+        if key3 in seen:
+            continue
+        events.append({
+            "t": fd.get("created_at") or 0,
+            "seq": None,
+            "kind": "finding",
+            "phase": "",
+            "agent": fd.get("agent") or "",
+            "title": fd.get("title") or "Finding",
+            "severity": fd.get("severity") or "",
+            "source": "finding",
+        })
+
+    # Start-/Ende-Marker aus dem Run selbst (immer echte Zeitstempel)
+    t0 = run.get("started_at") or run.get("created_at")
+    t1 = run.get("finished_at") or run.get("created_at")
+    if t0:
+        events.append({"t": t0, "seq": 0, "kind": "start", "phase": "",
+                       "agent": "", "title": "Lauf gestartet", "severity": "",
+                       "source": "run"})
+    if t1 and t1 != t0:
+        events.append({"t": t1, "seq": 10**9, "kind": "end", "phase": "",
+                       "agent": "", "title": "Lauf beendet", "severity": "",
+                       "source": "run"})
+    events.sort(key=lambda e: (e.get("t") or 0, e.get("seq") if e.get("seq") is not None else 0))
+
+    # 3) Typ klassifizieren (pentest / bugbounty / wlan) – nur aus echten Daten
+    agents = { (e.get("agent") or "").lower() for e in events }
+    mode = (run.get("mode") or "").lower()
+    if "wifi" in agents or "wlan" in agents or "wifi" in mode or "wlan" in mode:
+        rtype = "wlan"
+    elif run.get("offensive") or run.get("active") or run.get("fuzz") or mode == "offensive":
+        rtype = "bugbounty"
+    else:
+        rtype = "pentest"
+
+    return JSONResponse({
+        "ok": True,
+        "run": {
+            "id": run.get("id"),
+            "run_id": rid,
+            "target_id": run.get("target_id"),
+            "target_name": run.get("target_name") or "",
+            "mode": run.get("mode") or "defensive",
+            "type": rtype,
+            "status": run.get("status") or "",
+            "finding_count": run.get("finding_count") or 0,
+            "severity": sev,
+            "started_at": t0,
+            "finished_at": t1,
+            "duration": run.get("duration"),
+            "when": run.get("when") or "",
+            "error": run.get("error") or "",
+        },
+        "events": events,
+        "event_count": len(events),
+    })
+
+
+
+
+def _export_index() -> list[dict]:
+    import json as _json
+    exports_dir = os.path.join(
+        os.path.dirname(os.path.dirname(BASE)), "data", "exports")
+    items = []
+    try:
+        for name in sorted(os.listdir(exports_dir), reverse=True):
+            fp = os.path.join(exports_dir, name)
+            if not os.path.isfile(fp):
+                continue
+            ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+            st = os.stat(fp)
+            items.append({
+                "name": name, "kind": ext or "datei",
+                "size_kb": round(st.st_size / 1024, 1),
+                "when": _fmt_ts(st.st_mtime),
+            })
+    except FileNotFoundError:
+        pass
+    return items
+
+
+
+
 
 def _export_index() -> list[dict]:
     import json as _json

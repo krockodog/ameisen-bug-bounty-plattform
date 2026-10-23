@@ -215,6 +215,312 @@
     }
     requestAnimationFrame(frame);
   }
+
+  // =========================================================================
+  // ZEITRAFFER-PLAYER: einen echten Lauf (Pentest/Bugbounty/WLAN) abspielen
+  // =========================================================================
+  // UI: Auswahl + Play/Pause + Geschwindigkeit + Fortschritt.
+  // Animation: Ameisen laufen chronologisch entlang der Event-Pfad-Pheromonspur.
+  // Daten: GET /api/runs + GET /api/runs/{id}/timeline – nichts erfunden.
+  var player = {
+    open: false, playing: false, speed: 2, progress: 0, // 0..1
+    run: null, events: [],
+    // animierte Ameisen dieses Laufs (eigene Schicht, dimmt die anderen)
+    ants: [], path: [], lastTick: 0
+  };
+
+  function injectPlayerUI() {
+    if (document.getElementById("brain-tl-bar")) return;
+    var bar = document.createElement("div");
+    bar.id = "brain-tl-bar";
+    bar.innerHTML =
+      '<div class="tl-head"><span class="tl-ant">🐜</span> <strong>Zeitraffer</strong>' +
+      ' <span class="tl-sub">Lauf abspielen</span></div>' +
+      '<div class="tl-row">' +
+      '  <select id="tl-run" title="Lauf aus der Run-Historie"><option value="">— Lauf wählen —</option></select>' +
+      '  <button id="tl-play" class="tl-btn" title="Play/Pause" disabled>▶</button>' +
+      '  <select id="tl-speed" title="Geschwindigkeit">' +
+      '    <option value="1">1×</option><option value="2" selected>2×</option>' +
+      '    <option value="4">4×</option><option value="8">8×</option>' +
+      '  </select>' +
+      '</div>' +
+      '<div class="tl-row">' +
+      '  <input id="tl-scrub" type="range" min="0" max="1000" value="0" disabled>' +
+      '  <span id="tl-label" class="tl-label">kein Lauf</span>' +
+      '</div>' +
+      '<div id="tl-meta" class="tl-meta"></div>';
+    document.body.appendChild(bar);
+
+    var css = document.createElement("style");
+    css.id = "brain-tl-style";
+    css.textContent =
+      "#brain-tl-bar{position:fixed;left:1rem;bottom:1rem;z-index:5;width:340px;max-width:92vw;" +
+      "background:rgba(8,12,20,.9);border:1px solid rgba(56,224,255,.28);border-radius:10px;" +
+      "box-shadow:0 0 26px rgba(56,224,255,.14);padding:.55rem .7rem;color:#cfe7ff;" +
+      "backdrop-filter:blur(4px);font:12px/1.35 system-ui,sans-serif;}" +
+      "#brain-tl-bar .tl-head{display:flex;align-items:center;gap:.35rem;margin-bottom:.35rem;}" +
+      "#brain-tl-bar .tl-ant{filter:drop-shadow(0 0 6px rgba(210,153,34,.55));}" +
+      "#brain-tl-bar .tl-sub{color:#8a92a6;font-weight:400;margin-left:.2rem;}" +
+      "#brain-tl-bar .tl-row{display:flex;gap:.4rem;align-items:center;margin:.25rem 0;}" +
+      "#brain-tl-bar select,#brain-tl-bar button,#brain-tl-bar input[type=range]{" +
+      "background:#101726;color:#cfe7ff;border:1px solid #1d2740;border-radius:5px;" +
+      "padding:.25rem .4rem;font:inherit;}" +
+      "#brain-tl-bar select{flex:1;min-width:0;}" +
+      "#brain-tl-bar .tl-btn{flex:0 0 auto;min-width:2.2rem;cursor:pointer;}" +
+      "#brain-tl-bar .tl-btn:hover{box-shadow:0 0 12px rgba(56,224,255,.25);}" +
+      "#brain-tl-bar input[type=range]{flex:1;accent-color:#38e0ff;}" +
+      "#brain-tl-bar .tl-label{flex:0 0 auto;color:#9fb0cc;font-size:.72rem;min-width:4.5rem;text-align:right;}" +
+      "#brain-tl-bar .tl-meta{color:#8a92a6;font-size:.72rem;min-height:1.1em;}" +
+      "@media (prefers-reduced-motion:reduce){#brain-tl-bar .tl-btn{box-shadow:none}}";
+    document.head.appendChild(css);
+
+    document.getElementById("tl-run").addEventListener("change", onPickRun);
+    document.getElementById("tl-play").addEventListener("click", togglePlay);
+    document.getElementById("tl-speed").addEventListener("change", function (e) {
+      player.speed = parseFloat(e.target.value) || 1;
+    });
+    document.getElementById("tl-scrub").addEventListener("input", function (e) {
+      player.progress = (parseInt(e.target.value, 10) || 0) / 1000;
+      player.playing = false;
+      document.getElementById("tl-play").textContent = "▶";
+      applyProgress();
+    });
+  }
+
+  function typeLabel(t) {
+    return t === "wlan" ? "WLAN" : (t === "bugbounty" ? "Bugbounty" : "Pentest");
+  }
+
+  function refreshRunSelect(runs) {
+    var sel = document.getElementById("tl-run");
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">— Lauf wählen —</option>';
+    (runs || []).forEach(function (r) {
+      var opt = document.createElement("option");
+      opt.value = String(r.id);
+      var mode = (r.offensive || r.mode === "offensive" || r.active || r.fuzz) ? "offensiv" : "defensiv";
+      opt.textContent = (r.when || "?").slice(0, 16) + " · " +
+        (r.target_name || ("#" + r.target_id)) + " · " + mode +
+        " · " + (r.finding_count || 0) + " Funde";
+      sel.appendChild(opt);
+    });
+    if (cur) sel.value = cur;
+  }
+
+  // Hook into existing loadRuns success path: also refresh the player select.
+  var _origBuild = buildNodes;
+  buildNodes = function (runs) {
+    _origBuild(runs);
+    refreshRunSelect(runs);
+  };
+
+  function onPickRun() {
+    var id = document.getElementById("tl-run").value;
+    player.playing = false;
+    document.getElementById("tl-play").textContent = "▶";
+    player.progress = 0; player.ants = []; player.path = []; player.events = []; player.run = null;
+    document.getElementById("tl-scrub").value = 0;
+    document.getElementById("tl-scrub").disabled = true;
+    document.getElementById("tl-play").disabled = true;
+    document.getElementById("tl-label").textContent = "lädt …";
+    document.getElementById("tl-meta").textContent = "";
+    if (!id) { document.getElementById("tl-label").textContent = "kein Lauf"; return; }
+    fetch("/api/runs/" + encodeURIComponent(id) + "/timeline")
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok) {
+          document.getElementById("tl-label").textContent = "nicht verfügbar";
+          return;
+        }
+        player.run = data.run;
+        player.events = data.events || [];
+        buildPath();
+        document.getElementById("tl-play").disabled = false;
+        document.getElementById("tl-scrub").disabled = false;
+        document.getElementById("tl-label").textContent = "0/" + player.events.length;
+        document.getElementById("tl-meta").textContent =
+          typeLabel(data.run.type) + " · " + (data.run.target_name || "") +
+          " · " + (data.run.finding_count || 0) + " Funde · " +
+          player.events.length + " Schritte";
+        applyProgress();
+      })
+      .catch(function () {
+        document.getElementById("tl-label").textContent = "Fehler";
+      });
+  }
+
+  function buildPath() {
+    // Deterministischer Pfad durch den Viewport (oben Mitte → Bogen → unten rechts),
+    // ein Punkt pro Event. Basis aus Run-ID, damit Reloads stabil bleiben.
+    var n = player.events.length || 1;
+    var seed = 0;
+    var key = String((player.run && (player.run.run_id || player.run.id)) || 0);
+    for (var k = 0; k < key.length; k++) seed = (seed * 31 + key.charCodeAt(k)) >>> 0;
+    function h(i) { var x = Math.sin((seed + i) * 12.9898) * 43758.5453; return x - Math.floor(x); }
+    var path = [];
+    for (var i = 0; i < n; i++) {
+      var u = n === 1 ? 0.5 : i / (n - 1);
+      var x = 60 + u * (W - 120) + (h(i) - 0.5) * 30;
+      var y = H * 0.18 + Math.sin(u * Math.PI) * (H * 0.28) + (h(i + 7) - 0.5) * 20;
+      path.push({ x: x, y: y, ev: player.events[i] });
+    }
+    player.path = path;
+    // Eine Leit-Ameise + bis zu 4 Begleiter (Schwarm-Feeling, performant)
+    player.ants = [];
+    var count = Math.min(5, Math.max(1, Math.ceil(n / 6)));
+    for (var a = 0; a < count; a++) {
+      player.ants.push({
+        u: -a * 0.04, // leichter Versatz hinter der Leit-Ameise
+        trail: [], x: path[0] ? path[0].x : 0, y: path[0] ? path[0].y : 0
+      });
+    }
+  }
+
+  function togglePlay() {
+    if (!player.run || !player.path.length) return;
+    player.playing = !player.playing;
+    document.getElementById("tl-play").textContent = player.playing ? "⏸" : "▶";
+    if (player.playing && player.progress >= 0.999) player.progress = 0;
+    player.lastTick = performance.now();
+  }
+
+  function applyProgress() {
+    var path = player.path;
+    if (!path.length) return;
+    var u = Math.max(0, Math.min(1, player.progress));
+    var idx = Math.min(path.length - 1, Math.floor(u * (path.length - 1)));
+    document.getElementById("tl-scrub").value = Math.round(u * 1000);
+    document.getElementById("tl-label").textContent =
+      (idx + 1) + "/" + path.length;
+    var ev = path[idx] && path[idx].ev;
+    if (ev && player.run) {
+      document.getElementById("tl-meta").textContent =
+        typeLabel(player.run.type) + " · " +
+        (ev.kind === "finding" ? "🔍 " : (ev.kind === "start" ? "▶ " : (ev.kind === "end" ? "■ " : "• "))) +
+        (ev.title || ev.kind) +
+        (ev.severity ? " [" + ev.severity + "]" : "") +
+        (ev.agent ? " · " + ev.agent : "");
+    }
+  }
+
+  function posOnPath(u) {
+    var path = player.path;
+    if (!path.length) return { x: 0, y: 0, ang: 0, idx: 0 };
+    var max = path.length - 1;
+    var f = Math.max(0, Math.min(1, u)) * max;
+    var i = Math.floor(f);
+    var t = f - i;
+    var a = path[i], b = path[Math.min(max, i + 1)];
+    var x = a.x + (b.x - a.x) * t;
+    var y = a.y + (b.y - a.y) * t;
+    var ang = Math.atan2(b.y - a.y, b.x - a.x);
+    return { x: x, y: y, ang: ang, idx: i };
+  }
+
+  // Patch the existing frame() to also advance/draw the timelapse.
+  var _origFrame = frame;
+  frame = function (now) {
+    // Advance playback before drawing
+    if (player.playing && player.path.length) {
+      var dt = Math.min(0.05, (now - (player.lastTick || now)) / 1000);
+      player.lastTick = now;
+      // Gesamtdauer skaliert mit Event-Zahl (ca. 0.55s pro Schritt bei 1×)
+      var total = Math.max(2.5, player.path.length * 0.55);
+      player.progress += (dt * player.speed) / total;
+      if (player.progress >= 1) {
+        player.progress = 1; player.playing = false;
+        document.getElementById("tl-play").textContent = "▶";
+      }
+      applyProgress();
+    }
+
+    // Call original (clears + draws idle nodes)
+    _origFrame(now);
+
+    // Dim idle nodes slightly while a run is loaded
+    if (player.run && player.path.length) {
+      ctx.fillStyle = "rgba(0,0,0,0.28)";
+      ctx.fillRect(0, 0, W, H);
+      // Draw the full pheromone path (faint)
+      ctx.strokeStyle = "rgba(56,224,255,0.18)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (var i = 0; i < player.path.length; i++) {
+        var p = player.path[i];
+        if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke();
+      // Event beads
+      var reached = Math.floor(player.progress * (player.path.length - 1));
+      for (var j = 0; j < player.path.length; j++) {
+        var pj = player.path[j];
+        var ev = pj.ev || {};
+        var col = ev.severity && SEV_COL[String(ev.severity).toLowerCase()]
+          ? SEV_COL[String(ev.severity).toLowerCase()]
+          : (player.run.type === "wlan" ? [255, 198, 120]
+            : (player.run.type === "bugbounty" ? MAGENTA : CYAN));
+        var on = j <= reached;
+        ctx.beginPath();
+        ctx.fillStyle = on
+          ? "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0.95)"
+          : "rgba(80,90,110,0.55)";
+        ctx.arc(pj.x, pj.y, on ? 3.2 : 2.2, 0, Math.PI * 2);
+        ctx.fill();
+        if (on && (ev.kind === "finding" || ev.kind === "start" || ev.kind === "end")) {
+          var g = ctx.createRadialGradient(pj.x, pj.y, 0, pj.x, pj.y, 10);
+          g.addColorStop(0, "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0.55)");
+          g.addColorStop(1, "rgba(" + col[0] + "," + col[1] + "," + col[2] + ",0)");
+          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(pj.x, pj.y, 10, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      // Moving ants with trails
+      var baseCol = player.run.type === "wlan" ? [255, 198, 120]
+        : (player.run.type === "bugbounty" ? MAGENTA : CYAN);
+      for (var a = 0; a < player.ants.length; a++) {
+        var ant = player.ants[a];
+        var uu = Math.max(0, Math.min(1, player.progress + ant.u));
+        var pos = posOnPath(uu);
+        ant.x = pos.x; ant.y = pos.y;
+        if (!REDUCED) {
+          ant.trail.push({ x: ant.x, y: ant.y });
+          if (ant.trail.length > 18) ant.trail.shift();
+          for (var s = 0; s < ant.trail.length - 1; s++) {
+            var ta = (s / ant.trail.length) * 0.55;
+            ctx.strokeStyle = "rgba(" + baseCol[0] + "," + baseCol[1] + "," + baseCol[2] + "," + ta.toFixed(3) + ")";
+            ctx.lineWidth = 1 + (s / ant.trail.length) * 2;
+            ctx.beginPath();
+            ctx.moveTo(ant.trail[s].x, ant.trail[s].y);
+            ctx.lineTo(ant.trail[s + 1].x, ant.trail[s + 1].y);
+            ctx.stroke();
+          }
+        }
+        // glow + sprite
+        var gg = ctx.createRadialGradient(ant.x, ant.y, 0, ant.x, ant.y, 14);
+        gg.addColorStop(0, "rgba(" + baseCol[0] + "," + baseCol[1] + "," + baseCol[2] + ",0.85)");
+        gg.addColorStop(1, "rgba(" + baseCol[0] + "," + baseCol[1] + "," + baseCol[2] + ",0)");
+        ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(ant.x, ant.y, 14, 0, Math.PI * 2); ctx.fill();
+        if (spriteReady && !REDUCED) {
+          ctx.save();
+          ctx.translate(ant.x, ant.y);
+          ctx.rotate(pos.ang + Math.PI / 2);
+          ctx.globalAlpha = 0.95;
+          ctx.shadowColor = "rgba(" + baseCol[0] + "," + baseCol[1] + "," + baseCol[2] + ",0.9)";
+          ctx.shadowBlur = 10;
+          ctx.drawImage(sprite, -9, -9, 18, 18);
+          ctx.restore();
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(ant.x, ant.y, 2.6, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    // IMPORTANT: _origFrame already scheduled the next rAF. Our wrapper replaced
+    // `frame`, so the next tick calls US. Do NOT schedule another rAF here.
+  };
+
+  injectPlayerUI();
+
   requestAnimationFrame(frame);
-  try { console.info("[brain-runs] Lauf-Knoten-Layer aktiv."); } catch (e) {}
+  try { console.info("[brain-runs] Lauf-Knoten-Layer + Zeitraffer aktiv."); } catch (e) {}
 })();

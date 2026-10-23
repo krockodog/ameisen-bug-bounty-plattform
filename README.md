@@ -259,6 +259,12 @@ Umgesetzt:
   Pheromonspuren.
 
 
+- ✅ Zeitraffer im Neuronalen Gehirn: einen echten Lauf (Pentest, Bugbounty
+  oder WLAN) aus der Run-Historie auswählen und chronologisch abspielen
+  (`GET /api/runs/{id}/timeline`) – Play/Pause, Geschwindigkeit, Pheromonspur.
+  Nur reale Events/Findings; nichts erfunden.
+
+
 - ✅ Neuronales Gehirn: jeder echte Pentest-/Bugbounty-Lauf aus der
   Run-Historie (`/api/runs`) erscheint als leuchtende Ameise mit
   Pheromonspur und Tooltip (Ziel, Zeitpunkt, Modus, Funde); neue Läufe
