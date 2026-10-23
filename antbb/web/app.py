@@ -1129,6 +1129,75 @@ def api_wlan_delete_point(label: str, target_id: Optional[int] = None):
     return {"ok": True}
 
 
+# ---------------- WLAN-COVERAGE-HEATMAP (passiv, verortet; kein Angriff) ----------------
+@app.get("/api/wlan/heatmap")
+def api_wlan_heatmap(target_id: Optional[int] = None):
+    """Alle verorteten RSSI-Messpunkte + AP-Liste für die Heatmap (honest-empty)."""
+    return JSONResponse(svc.wlan_heatmap_data(target_id=target_id))
+
+
+@app.post("/api/wlan/heatmap/sample")
+def api_wlan_heatmap_sample(payload: dict):
+    """Mess-Sample an Position aufnehmen.
+    payload: {x, y, samples:{bssid:rssi}, ort?, own_bssids?, ap_meta?, target_id?}.
+    x/y sind normalisiert 0..1 (Klick auf Grundriss/Raster). Nur echte RSSI-Werte."""
+    if "x" not in payload or "y" not in payload:
+        raise HTTPException(400, "x + y (0..1) erforderlich")
+    samples = payload.get("samples") or {}
+    if not isinstance(samples, dict) or not samples:
+        raise HTTPException(400, "samples{bssid:rssi} erforderlich (echte Scan-Werte)")
+    try:
+        n = svc.wlan_heatmap_add_sample(
+            payload["x"], payload["y"], samples,
+            ort=(payload.get("ort") or "").strip(),
+            target_id=payload.get("target_id"),
+            own_bssids=payload.get("own_bssids") or [],
+            ap_meta=payload.get("ap_meta") or {})
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "sample_count": n}
+
+
+@app.delete("/api/wlan/heatmap/sample")
+def api_wlan_heatmap_delete(sample_id: int):
+    svc.wlan_heatmap_delete_sample(sample_id)
+    return {"ok": True}
+
+
+@app.delete("/api/wlan/heatmap")
+def api_wlan_heatmap_clear(target_id: Optional[int] = None):
+    n = svc.wlan_heatmap_clear(target_id)
+    return {"ok": True, "deleted": n}
+
+
+@app.get("/api/wlan/heatmap/floorplan")
+def api_wlan_heatmap_floorplan(target_id: Optional[int] = None):
+    fp = svc.wlan_heatmap_floorplan(target_id=target_id)
+    return JSONResponse({"floorplan": fp})
+
+
+@app.post("/api/wlan/heatmap/floorplan")
+def api_wlan_heatmap_floorplan_set(payload: dict):
+    """Grundriss-Upload als data:image/...;base64 URL (optional). Keine Secrets."""
+    data_url = payload.get("data_url") or ""
+    try:
+        fid = svc.wlan_heatmap_set_floorplan(
+            data_url, filename=(payload.get("filename") or ""),
+            mime=(payload.get("mime") or "image/png"),
+            target_id=payload.get("target_id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True, "id": fid}
+
+
+@app.delete("/api/wlan/heatmap/floorplan")
+def api_wlan_heatmap_floorplan_del(target_id: Optional[int] = None):
+    svc.wlan_heatmap_delete_floorplan(target_id)
+    return {"ok": True}
+
+
+
+
 # ---------------- WLAN-OFFENSIV (AUTORISIERT: Engagement-Gate + Oversight) ----------------
 @app.get("/api/wlan/offensive/status")
 def api_wlan_off_status():

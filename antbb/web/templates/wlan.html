@@ -9,6 +9,7 @@
 <div class="wlan-tabs" id="wlan-tabs" role="tablist">
   <button type="button" class="wtab active" data-tab="scope">🎯 WLAN-Scope</button>
   <button type="button" class="wtab" data-tab="coverage">📶 Coverage &amp; Scan</button>
+  <button type="button" class="wtab" data-tab="heatmap">🗺️ Heatmap</button>
   <button type="button" class="wtab wtab-offensive" data-tab="offensive">🗡️ Offensiv / Airgorah</button>
 </div>
 
@@ -59,6 +60,61 @@
   <div id="wlan-view">lädt…</div>
 </section>
 
+<!-- (2b) HEATMAP – WLAN-Coverage-Karte (passiv, verortete RSSI) -->
+<section class="card wlan-panel" id="wlan-panel-heatmap" data-panel="heatmap" hidden>
+  <h3>🗺️ WLAN-Coverage-Heatmap
+    <small>passiv – Signalstärke pro Raum als Karte. Nur eigene Umgebung. Keine Angriffe.</small>
+  </h3>
+  <p class="hint">So misst du: optional einen <b>Grundriss hochladen</b> (sonst Raster). Dann
+    pro Standort <b>„📡 Hier messen“</b> → der vorhandene passive Scan liest die echte
+    Signalstärke (RSSI) je AP, du setzt die Position per <b>Klick auf die Karte</b>. Die
+    Ameisen tragen die Messung in den Bau. Gut = grün 🐜, schlecht = rot. Nichts erfunden –
+    ohne Scan (Rechte/Adapter) ein ehrlicher Hinweis statt Fake-Werte.</p>
+
+  <div class="wlan-heat-toolbar">
+    <label class="wlan-field">AP/SSID:
+      <select id="heat-ap"><option value="__best__">Bestes Signal (aggregiert)</option></select>
+    </label>
+    <label class="wlan-field wlan-check" title="Interpolierte Fläche (IDW) ein/aus">
+      <input type="checkbox" id="heat-interp" checked> Interpolation
+    </label>
+    <label class="wlan-field wlan-check" title="Ameisen entlang der Pheromonspur">
+      <input type="checkbox" id="heat-ants" checked> Ameisen 🐜
+    </label>
+    <span class="wlan-heat-spacer"></span>
+    <label class="wlan-field wlan-file">📐 Grundriss
+      <input type="file" id="heat-floorplan" accept="image/*" hidden>
+    </label>
+    <button type="button" id="heat-floorplan-clear" class="wlan-ghost">Grundriss entfernen</button>
+  </div>
+
+  <div class="wlan-heat-toolbar">
+    <button type="button" id="heat-measure" class="wlan-primary">📡 Hier messen (passiver Scan)</button>
+    <label class="wlan-field">Ort/Raum:
+      <input type="text" id="heat-ort" placeholder="z.B. Wohnzimmer" maxlength="60">
+    </label>
+    <label class="wlan-check" title="Platzierung per Klick">
+      <input type="checkbox" id="heat-place" disabled> Position per Klick setzen
+    </label>
+    <button type="button" id="heat-clear" class="wlan-ghost">Alle Messpunkte löschen</button>
+  </div>
+
+  <div id="heat-status" class="wlan-status">Bereit. „📡 Hier messen“ startet einen passiven Scan.</div>
+
+  <div class="wlan-heat-stage">
+    <canvas id="heat-canvas" width="900" height="560"
+            aria-label="WLAN-Coverage-Heatmap"></canvas>
+  </div>
+
+  <div class="wlan-heat-legend" id="heat-legend">
+    <span class="wlan-heat-leg wlan-heat-gut">gut (≥ -55 dBm)</span>
+    <span class="wlan-heat-leg wlan-heat-ok">ok (-56..-67)</span>
+    <span class="wlan-heat-leg wlan-heat-schwach">schwach (-68..-75)</span>
+    <span class="wlan-heat-leg wlan-heat-funkloch">Funkloch (&lt; -75)</span>
+    <span class="wlan-heat-count" id="heat-count"></span>
+  </div>
+</section>
+
 <!-- (3) OFFENSIV / AIRGORAH – Gate + Airgorah-Workflow -->
 <section class="card wlan-panel wlan-offensive-panel blocked-border" id="wlan-panel-offensive"
          data-panel="offensive" hidden>
@@ -78,6 +134,7 @@ kein GTK-Embed. Deauth/Evil-Twin/Capture nur operator-getriggert, keine autonome
 <script src="/static/wlan_scope.js"></script>
 <script src="/static/wlan.js"></script>
 <script src="/static/wlan_offensive.js"></script>
+<script src="/static/wlan_heatmap.js"></script>
 <script>
 (function () {
   "use strict";
@@ -92,7 +149,7 @@ kein GTK-Embed. Deauth/Evil-Twin/Capture nur operator-getriggert, keine autonome
   tabs.forEach(t => t.addEventListener("click", () => show(t.getAttribute("data-tab"))));
   // Deep-Link ?tab=scope|coverage|offensive
   const q = new URLSearchParams(location.search).get("tab");
-  show(["scope", "coverage", "offensive"].includes(q) ? q : "scope");
+  show(["scope", "coverage", "heatmap", "offensive"].includes(q) ? q : "scope");
 })();
 </script>
 {% endblock %}

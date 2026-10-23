@@ -520,3 +520,22 @@ button.wlan-queen-btn { background: linear-gradient(135deg,#3a5fd0,#6a3fd0); bor
   opacity:.75; filter:drop-shadow(0 0 4px rgba(210,153,34,.35)); }
 .dyk-li:hover { background:rgba(56,224,255,.04); }
 .dyk-li:hover::before { opacity:1; filter:drop-shadow(0 0 6px rgba(56,224,255,.6)); }
+
+/* ---- WLAN-Coverage-Heatmap (antbb Schwarz-Theme + Ameisen-Look) -------- */
+.wlan-heat-toolbar { display:flex; flex-wrap:wrap; gap:.6rem; align-items:center;
+  margin:.5rem 0; }
+.wlan-heat-spacer { flex:1 1 auto; }
+.wlan-file { cursor:pointer; background:#0f1115; border:1px solid #30353f;
+  padding:.35rem .6rem; border-radius:5px; color:var(--fg); }
+.wlan-file:hover { border-color:var(--accent); color:var(--accent); }
+.wlan-heat-stage { position:relative; border:1px solid #30353f; border-radius:8px;
+  background:#05070c; overflow:hidden; box-shadow:0 0 24px rgba(56,224,255,.08) inset; }
+#heat-canvas { display:block; width:100%; height:auto; cursor:crosshair; }
+.wlan-heat-legend { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center;
+  margin-top:.5rem; font-size:.85rem; color:var(--muted); }
+.wlan-heat-leg { padding:.15rem .5rem; border-radius:10px; color:#05070c; font-weight:600; }
+.wlan-heat-gut { background:#3fb950; }
+.wlan-heat-ok { background:#c6e03f; }
+.wlan-heat-schwach { background:#e0a022; }
+.wlan-heat-funkloch { background:#f85149; color:#fff; }
+.wlan-heat-count { margin-left:auto; color:var(--glow); font-variant-numeric:tabular-nums; }

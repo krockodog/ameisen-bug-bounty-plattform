@@ -298,6 +298,126 @@ class AntBBService:
                           target_id: Optional[int] = None) -> None:
         self.store.delete_wlan_point(point_label, target_id)
 
+    # ---------------- WLAN-Coverage-Heatmap (verortete passive RSSI-Messung) ----------------
+    @staticmethod
+    def _rssi_quality(rssi: Optional[int]) -> str:
+        """Regelbasierte Einstufung der Signalstärke (dBm). Keine erfundenen Werte."""
+        if rssi is None:
+            return "none"
+        if rssi >= -55:
+            return "gut"
+        if rssi >= -67:
+            return "ok"
+        if rssi >= -75:
+            return "schwach"
+        return "funkloch"
+
+    def wlan_heatmap_add_sample(self, x: float, y: float, samples: dict,
+                                ort: str = "", target_id: Optional[int] = None,
+                                own_bssids: Optional[list] = None,
+                                ap_meta: Optional[dict] = None) -> int:
+        """Nimmt an Position (x,y normalisiert 0..1) einen Mess-Sample auf:
+        pro sichtbarem AP {bssid: rssi}. Echte RSSI-Werte aus dem Scan.
+        ap_meta optional {bssid: {ssid, channel, band}} für Anzeige."""
+        try:
+            x = float(x); y = float(y)
+        except (TypeError, ValueError):
+            raise ValueError("x/y müssen Zahlen 0..1 sein")
+        if x != x or y != y:  # NaN
+            raise ValueError("x/y müssen gültige Zahlen 0..1 sein")
+        x = min(1.0, max(0.0, x)); y = min(1.0, max(0.0, y))
+        own = {b.lower() for b in (own_bssids or [])}
+        meta = ap_meta or {}
+        n = 0
+        for bssid, rssi in (samples or {}).items():
+            try:
+                r = int(rssi)
+            except (TypeError, ValueError):
+                r = None
+            m = meta.get(bssid) or meta.get((bssid or "").lower()) or {}
+            self.store.add_wlan_heatmap_sample(
+                x, y, bssid, rssi=r, ssid=m.get("ssid", ""),
+                channel=m.get("channel"), band=m.get("band", ""),
+                is_own=(bssid or "").lower() in own, ort=ort, target_id=target_id)
+            n += 1
+        return n
+
+    def wlan_heatmap_delete_sample(self, sample_id: int) -> None:
+        self.store.delete_wlan_heatmap_sample(sample_id)
+
+    def wlan_heatmap_clear(self, target_id: Optional[int] = None) -> int:
+        return self.store.clear_wlan_heatmap_samples(target_id)
+
+    def wlan_heatmap_set_floorplan(self, data_url: str, filename: str = "",
+                                   mime: str = "image/png",
+                                   target_id: Optional[int] = None) -> int:
+        if not isinstance(data_url, str) or not data_url.startswith("data:image/"):
+            raise ValueError("data_url muss eine data:image/... Base64-URL sein")
+        if len(data_url) > 12_000_000:
+            raise ValueError("Grundriss zu groß (max ~9 MB Bild)")
+        return self.store.set_wlan_floorplan(data_url, filename=filename,
+                                             mime=mime, target_id=target_id)
+
+    def wlan_heatmap_floorplan(self, target_id: Optional[int] = None) -> Optional[dict]:
+        row = self.store.get_wlan_floorplan(target_id)
+        if not row:
+            return None
+        return {"id": row["id"], "filename": row["filename"], "mime": row["mime"],
+                "data_url": row["data_url"], "target_id": row["target_id"]}
+
+    def wlan_heatmap_delete_floorplan(self, target_id: Optional[int] = None) -> None:
+        self.store.delete_wlan_floorplan(target_id)
+
+    def wlan_heatmap_data(self, target_id: Optional[int] = None) -> dict:
+        """Liefert alle verorteten Messpunkte strukturiert für die Visualisierung:
+        rohe Samples, Liste sichtbarer APs (bssid/ssid), und pro Position das beste
+        Signal aggregiert. Interpolation (IDW) passiert clientseitig im Canvas.
+        honest-empty: ohne Samples leere, aber valide Struktur."""
+        rows = self.store.list_wlan_heatmap_samples(target_id)
+        aps: dict = {}
+        points: dict = {}          # key (x,y,ort) -> {bssid: rssi}
+        samples_out = []
+        for r in rows:
+            b = r["bssid"]
+            if b not in aps:
+                aps[b] = {"bssid": b, "ssid": r["ssid"] or "",
+                          "band": r["band"] or "", "channel": r["channel"],
+                          "is_own": bool(r["is_own"])}
+            elif r["ssid"] and not aps[b]["ssid"]:
+                aps[b]["ssid"] = r["ssid"]
+            key = (round(r["x"], 4), round(r["y"], 4), r["ort"] or "")
+            points.setdefault(key, {"x": r["x"], "y": r["y"], "ort": r["ort"] or "",
+                                    "rssi": {}})
+            if r["rssi"] is not None:
+                prev = points[key]["rssi"].get(b)
+                # bei mehreren Messungen an gleicher Stelle: besten (höchsten) RSSI behalten
+                if prev is None or r["rssi"] > prev:
+                    points[key]["rssi"][b] = r["rssi"]
+            samples_out.append({"id": r["id"], "x": r["x"], "y": r["y"],
+                                "ort": r["ort"] or "", "bssid": b,
+                                "ssid": r["ssid"] or "", "rssi": r["rssi"],
+                                "is_own": bool(r["is_own"])})
+        pts = []
+        for p in points.values():
+            best = None
+            for v in p["rssi"].values():
+                if best is None or v > best:
+                    best = v
+            pts.append({"x": p["x"], "y": p["y"], "ort": p["ort"],
+                        "rssi": p["rssi"], "best_rssi": best,
+                        "quality": self._rssi_quality(best)})
+        return {
+            "points": pts,
+            "samples": samples_out,
+            "aps": sorted(aps.values(), key=lambda a: (not a["is_own"], a["ssid"], a["bssid"])),
+            "point_count": len(pts),
+            "sample_count": len(samples_out),
+            "has_floorplan": self.store.get_wlan_floorplan(target_id) is not None,
+            "legend": {"gut": ">= -55 dBm", "ok": "-56..-67 dBm",
+                       "schwach": "-68..-75 dBm", "funkloch": "< -75 dBm"},
+        }
+
+
     def _wlan_points_from_store(self, target_id: Optional[int] = None):
         """Rekonstruiert Mess-Punkte + eigene BSSIDs aus den gespeicherten Samples."""
         rows = self.store.list_wlan_samples(target_id)

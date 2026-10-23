@@ -197,6 +197,37 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at REAL NOT NULL
 );
 
+-- ---- WLAN-Coverage-Heatmap (passive RSSI-Messpunkte mit x/y-Position) ------
+-- Rein passive Signalstärke-Messung (RSSI) aus dem vorhandenen Scan, verortet
+-- durch Klick auf einen (optionalen) Grundriss oder ein leeres Raster. Keine
+-- Angriffe, keine Secrets. x/y sind NORMALISIERTE Koordinaten 0..1 relativ zur
+-- Grundrissfläche, damit die Darstellung auflösungsunabhängig bleibt.
+CREATE TABLE IF NOT EXISTS wlan_heatmap_samples (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_id   INTEGER,                    -- optional; Heatmap kann target-los sein
+    ort         TEXT NOT NULL DEFAULT '',   -- optionaler Mess-Punkt-/Raum-Name
+    x           REAL NOT NULL,              -- 0..1 relativ zur Fläche
+    y           REAL NOT NULL,              -- 0..1 relativ zur Fläche
+    bssid       TEXT NOT NULL,
+    ssid        TEXT DEFAULT '',
+    rssi        INTEGER,                     -- dBm (gemessen, echt)
+    channel     INTEGER,
+    band        TEXT DEFAULT '',            -- 2.4 | 5 | 6
+    is_own      INTEGER NOT NULL DEFAULT 0, -- eigener AP getaggt
+    created_at  REAL NOT NULL
+);
+
+-- Optionaler Grundriss-Upload pro Target (oder global, target_id NULL). Bild wird
+-- als Data-URL (base64) gespeichert; KEINE Secrets, nur eine Zeichnung/Karte.
+CREATE TABLE IF NOT EXISTS wlan_floorplans (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_id   INTEGER,                    -- NULL = global
+    filename    TEXT DEFAULT '',
+    mime        TEXT DEFAULT 'image/png',
+    data_url    TEXT NOT NULL,              -- data:image/...;base64,....
+    created_at  REAL NOT NULL
+);
+
 -- ---- Auth / Multi-User (optional, via ANTBB_AUTH=1) ----------------------
 -- Passwoerter werden NUR als gesalzener PBKDF2-HMAC-Hash gespeichert, NIE im
 -- Klartext. pw_hash/pw_salt sind Hex-Strings; kein Klartext, kein Log.
@@ -829,6 +860,77 @@ class Store:
                 "(target_id=? OR target_id IS NULL)", (point_label, target_id))
         self._conn.commit()
 
+    # ---------------- WLAN-Coverage-Heatmap (verortete passive RSSI-Messpunkte) ----------------
+    def add_wlan_heatmap_sample(self, x: float, y: float, bssid: str,
+                                rssi: Optional[int] = None, ssid: str = "",
+                                channel: Optional[int] = None, band: str = "",
+                                is_own: bool = False, ort: str = "",
+                                target_id: Optional[int] = None) -> int:
+        cur = self._conn.execute(
+            "INSERT INTO wlan_heatmap_samples (target_id, ort, x, y, bssid, ssid, "
+            "rssi, channel, band, is_own, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            (target_id, ort or "", float(x), float(y), (bssid or "").lower(), ssid,
+             rssi, channel, band, 1 if is_own else 0, _now()),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def list_wlan_heatmap_samples(self, target_id: Optional[int] = None) -> list[sqlite3.Row]:
+        if target_id is None:
+            return self._conn.execute(
+                "SELECT * FROM wlan_heatmap_samples ORDER BY created_at").fetchall()
+        return self._conn.execute(
+            "SELECT * FROM wlan_heatmap_samples WHERE target_id=? OR target_id IS NULL "
+            "ORDER BY created_at", (target_id,)).fetchall()
+
+    def delete_wlan_heatmap_sample(self, sample_id: int) -> None:
+        self._conn.execute(
+            "DELETE FROM wlan_heatmap_samples WHERE id=?", (int(sample_id),))
+        self._conn.commit()
+
+    def clear_wlan_heatmap_samples(self, target_id: Optional[int] = None) -> int:
+        if target_id is None:
+            cur = self._conn.execute("DELETE FROM wlan_heatmap_samples")
+        else:
+            cur = self._conn.execute(
+                "DELETE FROM wlan_heatmap_samples WHERE target_id=?", (target_id,))
+        self._conn.commit()
+        return cur.rowcount
+
+    def set_wlan_floorplan(self, data_url: str, filename: str = "",
+                           mime: str = "image/png",
+                           target_id: Optional[int] = None) -> int:
+        # Nur ein Grundriss pro target_id (bzw. global): alten entfernen.
+        if target_id is None:
+            self._conn.execute("DELETE FROM wlan_floorplans WHERE target_id IS NULL")
+        else:
+            self._conn.execute(
+                "DELETE FROM wlan_floorplans WHERE target_id=?", (target_id,))
+        cur = self._conn.execute(
+            "INSERT INTO wlan_floorplans (target_id, filename, mime, data_url, created_at) "
+            "VALUES (?,?,?,?,?)",
+            (target_id, filename or "", mime or "image/png", data_url, _now()),
+        )
+        self._conn.commit()
+        return cur.lastrowid
+
+    def get_wlan_floorplan(self, target_id: Optional[int] = None) -> Optional[sqlite3.Row]:
+        if target_id is None:
+            return self._conn.execute(
+                "SELECT * FROM wlan_floorplans WHERE target_id IS NULL "
+                "ORDER BY created_at DESC LIMIT 1").fetchone()
+        return self._conn.execute(
+            "SELECT * FROM wlan_floorplans WHERE target_id=? OR target_id IS NULL "
+            "ORDER BY target_id DESC, created_at DESC LIMIT 1", (target_id,)).fetchone()
+
+    def delete_wlan_floorplan(self, target_id: Optional[int] = None) -> None:
+        if target_id is None:
+            self._conn.execute("DELETE FROM wlan_floorplans WHERE target_id IS NULL")
+        else:
+            self._conn.execute(
+                "DELETE FROM wlan_floorplans WHERE target_id=?", (target_id,))
+        self._conn.commit()
+
     # ---------------- WLAN-Offensiv-Engagements (Autorisierungs-Record) ----------------
     def add_wlan_engagement(self, name: str, bssids: list, ssids: list,
                             start_ts: float, end_ts: float,
@@ -1125,6 +1227,7 @@ class Store:
         counts = {}
         for tbl in ("findings", "reports", "scopes", "scan_steps", "scan_runs",
                     "wlan_credentials", "wlan_engagements", "wlan_samples",
+                    "wlan_heatmap_samples", "wlan_floorplans",
                     "oversight", "targets"):
             try:
                 r = self._conn.execute(f"SELECT COUNT(*) AS c FROM {tbl}").fetchone()
@@ -1135,6 +1238,8 @@ class Store:
         # WLAN-Samples/-Engagements/-Credentials sind teils target-los -> explizit.
         self._conn.execute("DELETE FROM wlan_credentials")
         self._conn.execute("DELETE FROM wlan_samples")
+        self._conn.execute("DELETE FROM wlan_heatmap_samples")
+        self._conn.execute("DELETE FROM wlan_floorplans")
         self._conn.execute("DELETE FROM wlan_engagements")
         self._conn.execute("DELETE FROM scan_steps")
         self._conn.execute("DELETE FROM scan_runs")

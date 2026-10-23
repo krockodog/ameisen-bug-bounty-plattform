@@ -272,6 +272,18 @@ Umgesetzt:
   hinterlassen nun eine verblassende Pheromonspur.
 
 
+- ✅ WLAN-Coverage-Heatmap (Tab „Heatmap" in der WLAN-Ansicht): rein **passive**
+  Signalstärke-Messung (RSSI) je sichtbarem AP aus dem vorhandenen Scan, verortet
+  per Klick auf einen optionalen Grundriss-Upload oder ein leeres Raster (kein GPS).
+  Messpunkte landen persistent in SQLite (`wlan_heatmap_samples`), der Grundriss in
+  `wlan_floorplans`. Darstellung als Canvas-Heatmap mit einfacher IDW-Interpolation
+  (gut = grün → schlecht = rot), AP/SSID umschaltbar oder bestes Signal aggregiert,
+  Legende; verspielt im Ameisen-Look mit Pheromonspur und Ameisen-Markern, strikt im
+  Schwarz-Theme. Endpoints: `POST /api/wlan/heatmap/sample`, `GET /api/wlan/heatmap`,
+  `DELETE /api/wlan/heatmap`, Grundriss `POST|GET|DELETE /api/wlan/heatmap/floorplan`.
+  Nur eigene/erlaubte Umgebung, keine Angriffe; ohne Scan (Rechte/Adapter) ein
+  **ehrlicher Hinweis statt Fake-Daten**. Smoke-Test: `smoke_test_wlan_heatmap.py`.
+
 Offen / Ideen:
 
 - Weitere LLM-Adapter und Feinschliff der Router-Heuristiken.
