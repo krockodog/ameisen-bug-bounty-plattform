@@ -9,11 +9,71 @@
   const root = document.getElementById("soldier-cards");
   if (!root) return;
   const TID = window.ANTBB_TARGET_ID || null;
-  const AVATARS = ["👾","🛸","👻","🤖","🐜","🕷️","🦾","🧿","🔭","📡","🛰️","🧬","🔑","🧨","📶","⚙️"];
+  const AVATARS_OFF = ["👾","🛸","👻","🤖","🐜","🕷️","🦾","🧿","🔭","📡","🛰️","🧬","🔑","🧨","📶","⚙️"];
+  const AVATARS_BLUE = ["🛡","🔎","🧱","📡","🩺","🍯","🧿","🛰️","🧬","⚙️","🐜","🔭","🔑","📶","🦾","🛸"];
+  const AVATARS = ((window.ANTBB_COLONY||"").toLowerCase()==="blue") ? AVATARS_BLUE : AVATARS_OFF;
   const filterBox = document.getElementById("soldier-filter");
 
   function api(url, opts) { return fetch(url, opts).then(r => r.json()); }
   function esc(s){return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+  /** Sicherer Mini-Markdown-Renderer für SKILL.md (kein Roh-HTML aus Quelle). */
+  function mdLite(src) {
+    const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    let html = "", inCode = false, inUl = false, inOl = false;
+    const closeLists = () => {
+      if (inUl) { html += "</ul>"; inUl = false; }
+      if (inOl) { html += "</ol>"; inOl = false; }
+    };
+    const inline = (s) => esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (raw.trim().startsWith("```")) {
+        if (inCode) { html += "</code></pre>"; inCode = false; }
+        else { closeLists(); html += "<pre class='skill-pre'><code>"; inCode = true; }
+        continue;
+      }
+      if (inCode) { html += esc(raw) + "\n"; continue; }
+      if (/^---+$/.test(raw.trim()) && i < 8) { closeLists(); continue; }
+      if (/^(name|description|version|source|license)\s*:/.test(raw) && i < 12) {
+        closeLists();
+        const m = raw.match(/^(\w+)\s*:\s*(.*)$/);
+        if (m) html += `<div class="skill-meta"><span>${esc(m[1])}</span>${inline(m[2].replace(/^"|"$/g,""))}</div>`;
+        continue;
+      }
+      const hm = raw.match(/^(#{1,4})\s+(.*)$/);
+      if (hm) {
+        closeLists();
+        const lvl = hm[1].length;
+        html += `<h${lvl + 2} class="skill-h">${inline(hm[2])}</h${lvl + 2}>`;
+        continue;
+      }
+      if (/^>\s?/.test(raw)) {
+        closeLists();
+        html += `<blockquote class="skill-quote">${inline(raw.replace(/^>\s?/, ""))}</blockquote>`;
+        continue;
+      }
+      if (/^[-*]\s+/.test(raw)) {
+        if (!inUl) { closeLists(); html += "<ul class='skill-ul'>"; inUl = true; }
+        html += `<li>${inline(raw.replace(/^[-*]\s+/, ""))}</li>`;
+        continue;
+      }
+      if (/^\d+\.\s+/.test(raw)) {
+        if (!inOl) { closeLists(); html += "<ol class='skill-ol'>"; inOl = true; }
+        html += `<li>${inline(raw.replace(/^\d+\.\s+/, ""))}</li>`;
+        continue;
+      }
+      if (!raw.trim()) { closeLists(); continue; }
+      closeLists();
+      html += `<p class="skill-p">${inline(raw)}</p>`;
+    }
+    closeLists();
+    if (inCode) html += "</code></pre>";
+    return html || "<p class='hint'>_(SKILL.md leer)_</p>";
+  }
 
   let REG = null;           // capabilities registry
   const DETAIL = {};        // name -> detail payload cache
@@ -56,6 +116,7 @@
         <button data-tab="vault">Vault</button>
       </div>
       <div class="sc-bar"><span data-bar></span></div>
+      <div class="sc-pb-strip" data-pb-strip></div>
       <div class="sc-body" data-body>lädt…</div>
       <div class="sc-files">
         <span class="chip" data-file="todo">todo.md</span>
@@ -78,7 +139,11 @@
       c.onclick = () => renderFile(sol.name, c.dataset.file, body);
     });
 
-    loadDetail(sol.name).then(()=>{ renderTab(sol.name, "skills", body); updateBadge(sol.name, el); });
+    loadDetail(sol.name).then(()=>{
+      renderPbStrip(sol.name, el);
+      renderTab(sol.name, "skills", body);
+      updateBadge(sol.name, el);
+    });
     return el;
   }
 
@@ -97,7 +162,24 @@
     el.querySelector("[data-bar]").style.width = pct + "%";
   }
 
-  function renderTab(name, tab, body) {
+  function renderPbStrip(name, el) {
+    const strip = el.querySelector("[data-pb-strip]");
+    if (!strip) return;
+    const d = DETAIL[name];
+    const pbs = (d && d.soldier && d.soldier.playbooks) || [];
+    if (!pbs.length) {
+      strip.innerHTML = '<span class="sc-pb-chip">keine Playbooks</span>';
+      return;
+    }
+    strip.innerHTML = pbs.map(pb => {
+      const n = (pb.task_items||[]).length;
+      const ov = pb.oversight_required ? " · 🔒" : "";
+      return '<span class="sc-pb-chip" title="'+esc(pb.description||'')+'">'
+        + esc(pb.name) + ' · ' + n + ' Aufgaben' + ov + '</span>';
+    }).join("");
+  }
+
+    function renderTab(name, tab, body) {
     const d = DETAIL[name]; if (!d) return;
     if (tab === "skills") return renderSkills(name, body);
     if (tab === "spawn") return renderSpawn(name, body);
@@ -107,8 +189,14 @@
   function renderSkills(name, body) {
     const d = DETAIL[name];
     const {ovmap} = doneCount(d);
-    let h = "";
-    (d.soldier.playbooks||[]).forEach(pb => {
+    const pbs = d.soldier.playbooks || [];
+    if (!pbs.length) {
+      body.innerHTML = `<p class="hint">Keine Playbooks für <b>${esc(name)}</b> in der Registry —
+        ehrlicher Leerzustand (kein Platzhalter).</p>`;
+      return;
+    }
+    let h = `<p class="hint">${pbs.length} Playbooks · Aufgaben abhaken speichert Overrides.</p>`;
+    pbs.forEach(pb => {
       const enabledOv = ovmap[pb.name+"|enabled"];
       const enabled = !(enabledOv && ["false","0","no","off"].includes(String(enabledOv).toLowerCase()));
       h += `<div class="pb ${enabled?"":"pb-off"}">
@@ -203,9 +291,30 @@
     } else if (file === "skill") {
       const sk = d.soldier.skill || {};
       const full = sk.skill_md || ("# SKILL.md — " + (sk.name||name) + "\n\n" + (sk.summary||d.soldier.role));
-      tgt.innerHTML = `<p class="hint">SKILL.md (Octogent-Format${sk.skill_md_edited?", bearbeitet":""}) — editierbar:</p>
-        <textarea data-skill-md style="width:100%;max-width:none;min-height:220px;font-family:monospace;font-size:.7rem;">${esc(full)}</textarea>
-        <button data-skill-save>SKILL.md speichern</button>`;
+      const edited = sk.skill_md_edited ? ", bearbeitet" : "";
+      tgt.innerHTML = `<div class="skill-view">
+        <div class="skill-toolbar">
+          <span class="hint">SKILL.md (Octogent${edited})</span>
+          <button type="button" data-skill-mode="read" class="active">Lesen</button>
+          <button type="button" data-skill-mode="edit">Bearbeiten</button>
+        </div>
+        <div class="skill-md" data-skill-read>${mdLite(full)}</div>
+        <div data-skill-edit style="display:none">
+          <textarea data-skill-md style="width:100%;max-width:none;min-height:260px;font-family:ui-monospace,monospace;font-size:.72rem;">${esc(full)}</textarea>
+          <button data-skill-save>SKILL.md speichern</button>
+        </div>
+      </div>`;
+      const readEl = tgt.querySelector("[data-skill-read]");
+      const editEl = tgt.querySelector("[data-skill-edit]");
+      tgt.querySelectorAll("[data-skill-mode]").forEach(b => {
+        b.onclick = () => {
+          tgt.querySelectorAll("[data-skill-mode]").forEach(x => x.classList.remove("active"));
+          b.classList.add("active");
+          const mode = b.dataset.skillMode;
+          readEl.style.display = mode === "read" ? "" : "none";
+          editEl.style.display = mode === "edit" ? "" : "none";
+        };
+      });
       tgt.querySelector("[data-skill-save]").onclick = () => {
         post("/api/soldiers/"+encodeURIComponent(name)+"/override",
              {playbook:"", key:"skill_md", value: tgt.querySelector("[data-skill-md]").value})
@@ -255,6 +364,7 @@
     const el = root.querySelector('.soldier-card[data-name="'+CSS.escape(name)+'"]');
     if (!el) return;
     updateBadge(name, el);
+    renderPbStrip(name, el);
     const active = el.querySelector(".sc-tabs button.active");
     if (active) renderTab(name, active.dataset.tab, el.querySelector("[data-body]"));
   }
@@ -299,15 +409,42 @@
     const phases = reg.blue_phases || ["assess","harden","defend","remediate","verify"];
     const labels = {assess:"Assess", harden:"Harden", defend:"Defend",
                     remediate:"Remediate", verify:"Verify"};
-    host.innerHTML = '<div class="phase-row">' + phases.map(ph =>
-      '<div class="phase-chip blue"><b>' + (labels[ph]||ph) + '</b></div>').join("") + "</div>"
-      + '<p class="hint">Verteidigungs-Phasen der Blue Queen (Assess → Harden → Defend → Remediate → Verify).</p>';
+    const notes = {
+      assess: "Inventar & Lücken lesen",
+      harden: "Härtung prüfen / vorschlagen",
+      defend: "Detection & Decoys",
+      remediate: "Finding → Fix-Plan",
+      verify: "Vorher/Nachher belegen"
+    };
+    const byPhase = {};
+    phases.forEach(ph => { byPhase[ph] = []; });
+    (reg.soldiers||[]).forEach(s => {
+      const bps = s.blue_phases || [];
+      bps.forEach(ph => {
+        if (!byPhase[ph]) byPhase[ph] = [];
+        byPhase[ph].push(s.specialty || s.name);
+      });
+    });
+    const last = phases[phases.length-1];
+    host.innerHTML = '<div class="blue-phase-strip">' + phases.map(ph => {
+      const sols = (byPhase[ph]||[]);
+      const arrow = ph === last ? "" : '<span class="ph-arrow">→</span>';
+      return `<div class="blue-phase-chip" title="${esc(notes[ph]||'')}">
+        ${arrow}
+        <div class="ph-name">${esc(labels[ph]||ph)}</div>
+        <div class="ph-sol">${sols.length ? sols.map(esc).join(" · ") : "—"}</div>
+        <div class="hint">${esc(notes[ph]||"")}</div>
+      </div>`;
+    }).join("") + "</div>"
+      + '<p class="hint">Verteidigungs-Phasen der Blue Queen. Jeder Soldat trägt seine Playbooks '
+      + 'unter dem Tab <strong>Skills</strong> — Aufgaben sind abhakbar.</p>';
   }
 
   api("/api/soldiers").then(reg => {
     REG = reg;
     root.innerHTML = "";
     const colony = (window.ANTBB_COLONY || "").toLowerCase();
+    // Blue-Kolonie: nur Blue-Soldaten; Offensiv (Default): Blue ausblenden.
     let list = (reg.soldiers||[]);
     if (colony === "blue") {
       list = list.filter(s => s.colony === "blue" || (s.name||"").startsWith("blue-"));
@@ -316,7 +453,7 @@
       list = list.filter(s => s.colony !== "blue" && !(s.name||"").startsWith("blue-"));
       renderPhases(reg);
     }
-    REG.soldiers = list;
+    REG.soldiers = list; // card()-Index und Detail nutzen die gefilterte Liste
     list.forEach(card);
     const sum = document.getElementById("soldier-summary");
     if (sum) {
