@@ -29,6 +29,8 @@ Keine Angriffs-Kolonie, kein WLAN-Offensiv, kein Pentest-Gehirn als Oberfläche.
 | `antbb/hardening.py`, `antbb/remediation.py`, `antbb/softwarescan.py` | Lesende Checks |
 | `antbb/watcher.py`, `antbb/honeypot.py`, `antbb/attack_log.py` | Wächter, Decoy-Plan, Attack-Log |
 | `antbb/splunk.py` | Optionaler HEC-Adapter |
+| `antbb/greenbone.py` | Greenbone/OpenVAS: Report-Import (defensiv), Scan nur mit Oversight + Scope |
+| `antbb/agents/blue/greenbone.py` | Soldat `blue-greenbone` |
 
 ## Gemeinsame Fassung
 

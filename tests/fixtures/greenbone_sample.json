@@ -1,0 +1,23 @@
+{
+  "report": {
+    "id": "00000000-0000-4000-8000-000000000002",
+    "results": {
+      "result": [
+        {
+          "host": {"text": "192.0.2.3", "hostname": "db.example.com"},
+          "port": "5432/tcp",
+          "nvt": {
+            "oid": "1.3.6.1.4.1.25623.1.0.900010",
+            "name": "Example Database Privilege Escalation",
+            "cvss_base": "8.8",
+            "refs": {"ref": [{"type": "cve", "id": "CVE-2099-0010"}]},
+            "solution": {"type": "VendorFix", "text": "Apply the vendor update."}
+          },
+          "threat": "High",
+          "severity": "8.8",
+          "qod": {"value": "75", "type": "remote_banner"}
+        }
+      ]
+    }
+  }
+}

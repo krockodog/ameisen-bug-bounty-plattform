@@ -1,0 +1,2 @@
+IP,Hostname,Port,Port Protocol,CVSS,Severity,QoD,Solution Type,NVT Name,Summary,Specific Result,NVT OID,CVEs,Task ID,Task Name,Timestamp,Result ID,Impact,Solution,Affected Software/OS,Vulnerability Insight,Vulnerability Detection Method,Product Detection Result,BIDs,CERTs,Other References
+192.0.2.4,mail.example.com,25,tcp,6.4,Medium,80,Mitigation,Example SMTP Server Cleartext Authentication,SMTP offers cleartext auth,banner,1.3.6.1.4.1.25623.1.0.900020,CVE-2099-0020,t1,antbb-csv,2026-10-01T08:00:00Z,r1,,Enable STARTTLS and require it,,,,,,,

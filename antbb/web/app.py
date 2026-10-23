@@ -403,6 +403,17 @@ def brain_page(request: Request):
 
 
 
+def _gb_static_status() -> dict:
+    """Greenbone-Status für den Seitenaufbau OHNE Netz-/Socket-Sondierung (die
+    Karte aktualisiert sich anschließend über /api/blue/greenbone/status)."""
+    try:
+        from .. import greenbone as _gb
+        return _gb.status(probe=False)
+    except Exception as exc:  # defensiv: /blue darf nie an Greenbone scheitern
+        return {"available": False, "error": f"Greenbone nicht verfügbar ({type(exc).__name__})",
+                "message": "", "import_available": True}
+
+
 @app.get("/blue", response_class=HTMLResponse)
 def blue_page(request: Request):
     """Blue Queen – Verteidigungs-Kolonie (Soldaten, Jobs, Splunk-Status)."""
@@ -454,6 +465,7 @@ def blue_page(request: Request):
         "targets": targets, "jobs": jobs, "job_runs": job_runs,
         "splunk": cap.get("splunk", {}),
         "blue_stats": blue_stats, "ledger_rows": ledger_rows,
+        "gb_status": _gb_static_status(),
         "disclaimer": DISCLAIMER_TEXT,
     })
 
@@ -556,6 +568,101 @@ def api_blue_watcher(payload: Optional[dict] = None):
 @app.get("/api/blue/softwarescan")
 def api_blue_softwarescan(online: int = 1):
     return JSONResponse(svc.softwarescan(online=bool(online)))
+
+
+# ---------------- Greenbone / OpenVAS (Blue Queen) ----------------
+@app.get("/api/blue/greenbone/status")
+def api_blue_greenbone_status():
+    """Ehrlicher GVM-Status: nie ein Fehler-500, nie Zugangsdaten."""
+    try:
+        return JSONResponse(svc.greenbone_status())
+    except Exception as exc:
+        return JSONResponse({
+            "available": False, "import_available": True, "can_scan": False,
+            "error": f"Greenbone nicht verfügbar ({type(exc).__name__})",
+            "message": "", "drop_dir": "data/greenbone/", "drop_files": [],
+        })
+
+
+@app.post("/api/blue/greenbone/import")
+async def api_blue_greenbone_import(request: Request):
+    """Defensiv (ohne Oversight): Report-Import. Multipart `file` ODER JSON
+    {"path": "<Datei unter data/greenbone/>", "target_id": optional}."""
+    from .. import greenbone as _gb
+    ctype = (request.headers.get("content-type") or "").lower()
+    target_id = None
+    try:
+        if "multipart/form-data" in ctype:
+            form = await request.form()
+            up = form.get("file")
+            if up is None or not getattr(up, "filename", None):
+                return JSONResponse({"ok": False, "error": "Datei fehlt."}, status_code=400)
+            data = await up.read(_gb.MAX_IMPORT_BYTES + 1)
+            if len(data) > _gb.MAX_IMPORT_BYTES:
+                return JSONResponse({"ok": False, "error": "Report zu groß (max. 50 MB)."},
+                                    status_code=400)
+            if form.get("target_id"):
+                target_id = int(form.get("target_id"))
+            out = svc.greenbone_import(
+                data=data, filename=up.filename or "report.xml", target_id=target_id,
+                min_severity=str(form.get("min_severity") or "high"))
+        else:
+            payload = await request.json() if ctype.startswith("application/json") else {}
+            payload = payload if isinstance(payload, dict) else {}
+            if payload.get("target_id") not in (None, ""):
+                target_id = int(payload["target_id"])
+            out = svc.greenbone_import(
+                path=str(payload.get("path") or ""), target_id=target_id,
+                min_severity=str(payload.get("min_severity") or "high"))
+    except HTTPException:
+        raise
+    except (_gb.GvmError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    if out.get("empty"):
+        return JSONResponse(out, status_code=404)
+    return JSONResponse(out)
+
+
+@app.post("/api/blue/greenbone/scan")
+def api_blue_greenbone_scan(payload: dict):
+    """AKTIV: Scan gegen EIN In-Scope-Ziel. Pflicht: target_id, host und
+    oversight_ack=true (default-deny). Fehlt GVM → ehrlicher 503."""
+    payload = payload or {}
+    ack = payload.get("oversight_ack", payload.get("confirm"))
+    try:
+        tid = int(payload["target_id"])
+    except (TypeError, ValueError, KeyError):
+        raise HTTPException(400, "target_id fehlt (Scope ist default-deny).")
+    try:
+        wait = min(int(payload.get("wait_seconds") or 0), 900)
+    except (TypeError, ValueError):
+        wait = 0
+    try:
+        res = svc.greenbone_scan(
+            tid, str(payload.get("host") or ""), ack is True,
+            scan_config=str(payload.get("scan_config") or ""),
+            wait_seconds=wait)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    if res.get("ok"):
+        return JSONResponse(res)
+    code = {"oversight": 403, "scope": 403, "target": 400, "config": 400,
+            "unavailable": 503, "credentials": 503, "busy": 429,
+            "rate_limit": 429, "gvm": 502}.get(res.get("reason"), 400)
+    return JSONResponse(res, status_code=code)
+
+
+@app.get("/api/blue/greenbone/scan/{task_id}")
+def api_blue_greenbone_scan_status(task_id: str, fetch: int = 0,
+                                   target_id: Optional[int] = None):
+    """Lesend: Scan-Status; `fetch=1` holt einen fertigen Report und importiert ihn."""
+    from .. import greenbone as _gb
+    try:
+        res = svc.greenbone_scan_status(task_id, import_report=bool(fetch),
+                                        target_id=target_id)
+    except (_gb.GvmError, ValueError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return JSONResponse(res, status_code=200 if res.get("ok") else 502)
 
 
 # ---------------- Form-Handler (HTML) – rufen nur Service-Funktionen ----------------

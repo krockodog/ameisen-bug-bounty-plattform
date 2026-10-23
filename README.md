@@ -42,8 +42,17 @@ und sammelt die Ergebnisse. „Nachweislich geschlossen“ gilt erst, wenn ein
 lesender Re-Check Vorher und Nachher belegt.
 
 Dazu gehören unter anderem Software-Inventar, Härtung, Firewall, TLS,
-Patches, Logs, Backups, Wächter, Detection, Honeypots als Rezept, Remediation
-und der append-only Attack-Log. Wiederholbare Jobs liegen in der Datenbank.
+Patches, Logs, Backups, Wächter, Detection, Honeypots als Rezept, Remediation,
+der append-only Attack-Log und der Greenbone-/OpenVAS-Import. Wiederholbare
+Jobs liegen in der Datenbank.
+
+Greenbone: einen Report (XML, CSV, JSON) lege ich nach `data/greenbone/` oder
+lade ihn unter `/blue` hoch. Das ist defensiv und braucht kein Oversight.
+Ein Scan startet nur mit Human Oversight gegen genau ein In-Scope-Ziel.
+`GVM_USERNAME`, `GVM_PASSWORD` und optional `GVM_SOCKET` kommen nur aus der
+Umgebung. Fehlt GVM, steht dort „Greenbone nicht verfügbar“; der Import aus
+Datei bleibt möglich. Der Job `greenbone` importiert den neuesten Report und
+startet keinen Scan.
 Splunk-HEC ist optional (`ANTBB_SPLUNK_HEC_URL` und `ANTBB_SPLUNK_HEC_TOKEN`);
 ohne die Variablen wird nichts gesendet.
 
@@ -77,9 +86,11 @@ eintippe, in die lokale `antbb.env` (`chmod 600`, gitignored).
 
 ```bash
 python -m unittest tests.test_bluequeen
+python smoke_test_greenbone.py
 ```
 
-Der Test lädt die Soldaten, einen kleinen Kolonie-Lauf und die Route `/blue`.
+Der erste Test lädt die Soldaten, einen kleinen Kolonie-Lauf und die Route `/blue`.
+Der zweite prüft den Greenbone-Import und die Scan-Gates ohne laufendes GVM.
 
 ## Lizenz
 

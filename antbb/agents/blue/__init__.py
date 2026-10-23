@@ -20,7 +20,7 @@ _SKIP = {"base", "audit", "_sys"}
 
 #: Bevorzugte Reihenfolge (Kette Assess → … → Verify); Unbekannte folgen alphabetisch.
 _ORDER = [
-    "blue-swscan", "blue-patchmgmt", "blue-hardening", "blue-fwaudit", "blue-netdef",
+    "blue-swscan", "blue-greenbone", "blue-patchmgmt", "blue-hardening", "blue-fwaudit", "blue-netdef",
     "blue-idhygiene", "blue-credhygiene", "blue-tlsposture", "blue-webharden",
     "blue-supplychain", "blue-backup", "blue-backupverify",
     "blue-watcher", "blue-defense", "blue-logintegrity", "blue-logging",

@@ -799,3 +799,20 @@ body.blue-body .sc-pb-chip {
 .blue-runs-list { min-height: 2rem; }
 
 .phase-chip.blue { border-color:#2a5a8a; color:#7ec8ff; background:#0a1524; }
+
+/* ---- Greenbone-Karte (/blue) ---- */
+.gb-badge { float: right; font-size: .75rem; padding: .15rem .6rem; border-radius: 999px; border: 1px solid #2a4a63; }
+.gb-badge.gb-ok { color: #3fffa3; border-color: #1f7a55; }
+.gb-badge.gb-warn { color: #e6c15a; border-color: #7a6a2a; }
+.gb-badge.gb-off { color: #8a92a6; }
+.gb-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .8rem; }
+.gb-box { display: flex; flex-direction: column; align-items: stretch; background: #071018; border: 1px solid #1d3348; border-radius: 10px; padding: .7rem .8rem; }
+.gb-box h4 { margin: 0 0 .3rem; color: #d7f3ff; }
+.gb-box h4 small { color: #7a93a8; font-weight: 500; }
+#gb-result { margin-top: .6rem; }
+.gb-err { color: #ff8d8d; }
+.gb-sev { display: inline-block; font-size: .72rem; padding: 0 .35rem; border-radius: 4px; margin-right: .25rem; }
+.gb-sev-critical { background: #5a1020; color: #ffb4c0; }
+.gb-sev-high { background: #5a3010; color: #ffd0a8; }
+.gb-sev-medium { background: #4a4010; color: #ffe7a0; }
+.gb-sev-low { background: #123048; color: #b9dcff; }

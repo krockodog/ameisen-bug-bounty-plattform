@@ -38,6 +38,7 @@
   <a href="#blue-phases">Phasen</a>
   <a href="#blue-launch">Kolonie starten</a>
   <a href="#soldier-section">Soldaten &amp; Playbooks</a>
+  <a href="#blue-greenbone">Greenbone</a>
   <a href="#blue-jobs">Jobs</a>
   <a href="#blue-ledger">Ledger</a>
   <a href="#blue-attacklog">Attack-Log</a>
@@ -87,6 +88,53 @@
   <div id="soldier-cards" class="blue-soldier-grid">lädt Soldaten…</div>
 </section>
 
+<section class="card blue-card" id="blue-greenbone">
+  <h3>🌿 Greenbone / OpenVAS <small>Import → Härtung · Scan nur mit Oversight</small>
+    <span id="gb-badge" class="gb-badge {{ 'gb-ok' if gb_status.available else 'gb-off' }}">
+      {{ 'Greenbone vorhanden – prüfe…' if gb_status.available else 'Greenbone nicht verfügbar' }}</span></h3>
+  <p class="hint" id="gb-status-msg">{{ gb_status.message or gb_status.error }}</p>
+  <div class="gb-grid">
+    <form id="gb-import-form" class="blue-form gb-box" enctype="multipart/form-data">
+      <h4>📥 Report importieren <small>defensiv · kein Oversight nötig</small></h4>
+      <p class="hint">Greenbone-Export (<code>.xml</code>, <code>.csv</code>, <code>.json</code>) – wird nur gelesen,
+         es entsteht kein Netzwerkverkehr. Mit Ziel werden nur In-Scope-Hosts übernommen.</p>
+      <input type="file" name="file" accept=".xml,.csv,.json" required class="blue-field-input">
+      <label class="blue-field">Ziel (optional, Scope-Filter + Speicherung)
+        <select name="target_id">
+          <option value="">— nur anzeigen —</option>
+          {% for t in targets %}
+          <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" id="gb-import-go">Importieren</button>
+    </form>
+    <form id="gb-scan-form" class="blue-form gb-box">
+      <h4>🔒 Scoped Scan <small>aktiv · Oversight Pflicht</small></h4>
+      <p class="hint">Genau ein In-Scope-Host, nicht-destruktive Scan-Config, ein Scan gleichzeitig.
+         Ohne laufendes GVM + Zugangsdaten (<code>GVM_USERNAME</code>/<code>GVM_PASSWORD</code> in der Umgebung)
+         wird ehrlich nichts gestartet.</p>
+      <label class="blue-field">Ziel (Scope)
+        <select name="target_id" required>
+          <option value="">— wählen —</option>
+          {% for t in targets %}
+          <option value="{{ t.id }}">{{ t.name }} (#{{ t.id }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="blue-field">Host (eine IP oder ein Name)
+        <input name="host" required placeholder="192.0.2.10" class="blue-field-input" autocomplete="off">
+      </label>
+      <label class="blue-check">
+        <input type="checkbox" name="oversight_ack" id="gb-ack" value="1">
+        Human Oversight: ich gebe diesen einen Scan frei
+      </label>
+      <button type="submit" id="gb-scan-go" disabled>Scan starten</button>
+    </form>
+  </div>
+  <div id="gb-result" hidden></div>
+</section>
+
 <section class="card blue-card" id="blue-jobs">
   <h3>⏱ Wiederholbare Jobs <small>nightly · weekly · on-demand</small></h3>
   <p class="hint">Automatisch wiederkehrende Checks (Software-Scan, Hardening-Audit,
@@ -106,6 +154,7 @@
       <option value="backup">Backup-Verify</option>
       <option value="watcher">Wächter-Check</option>
       <option value="attacklog">Attack-Log Review</option>
+      <option value="greenbone">Greenbone-Import (neuester Report)</option>
     </select>
     <input name="interval_sec" type="number" value="86400" title="Intervall in Sekunden"
            class="blue-field-input blue-interval">
@@ -231,4 +280,5 @@
 <script>window.ANTBB_COLONY = "blue";</script>
 <script src="/static/soldiers.js"></script>
 <script src="/static/blue.js"></script>
+<script src="/static/blue_greenbone.js"></script>
 {% endblock %}

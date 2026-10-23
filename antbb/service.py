@@ -23,6 +23,24 @@ DEFAULT_EXPORT_DIR = os.path.join(
 )
 
 
+def _gb_finding_public(finding) -> dict:
+    """JSON-fähige Finding-Sicht für den Greenbone-Import (ohne Secrets)."""
+    ev = finding.evidence if isinstance(finding.evidence, dict) else {}
+    return {
+        "title": finding.title,
+        "severity": finding.severity,
+        "asset": finding.asset,
+        "status": finding.status,
+        "category": finding.category,
+        "agent": finding.agent,
+        "description": finding.description,
+        "cves": list(ev.get("cves") or []),
+        "qod": ev.get("qod"),
+        "cvss": ev.get("cvss"),
+        "nvt_oid": ev.get("nvt_oid") or "",
+    }
+
+
 class AntBBService:
     """Zentrale Fassade. Eine Instanz pro Prozess."""
 
@@ -879,6 +897,112 @@ class AntBBService:
                          "fixed": m.fixed, "aliases": m.aliases}
                         for m in rep.matches],
         }
+
+    # ---------------- Greenbone / OpenVAS (Blue Queen) ----------------
+    def greenbone_status(self) -> dict:
+        """Ehrlicher GVM-Status (kein Secret). Import bleibt immer möglich."""
+        from . import greenbone as gb
+        try:
+            st = gb.status()
+            d = gb.drop_dir()
+            try:
+                files = sorted(
+                    (f for f in d.iterdir()
+                     if f.is_file() and f.suffix.lower() in gb.IMPORT_SUFFIXES),
+                    key=lambda f: f.stat().st_mtime)
+                st["drop_files"] = [f.name for f in files][-20:]
+            except OSError:
+                st["drop_files"] = []
+            st["drop_dir"] = "data/greenbone/"
+            return st
+        except Exception as exc:
+            return {
+                "available": False, "import_available": True, "can_scan": False,
+                "error": f"Greenbone nicht verfügbar ({type(exc).__name__})",
+                "message": "", "drop_files": [], "drop_dir": "data/greenbone/",
+            }
+
+    def greenbone_import(self, path: str = "", data: Optional[bytes] = None,
+                         filename: str = "", target_id: Optional[int] = None,
+                         min_severity: str = "high") -> dict:
+        """Defensiv: Report importieren (Upload-Bytes ODER Pfad unter data/greenbone/).
+
+        Mit `target_id` werden nur In-Scope-Hosts übernommen und als Findings
+        persistiert; ohne Target ist es eine reine Datei-Analyse. Kein Oversight.
+        """
+        from . import greenbone as gb
+        import uuid as _uuid
+        if data is not None:
+            path = str(gb.save_upload(filename or "report.xml", data))
+        scope_filter = None
+        if target_id is not None:
+            if not self.store.get_target(target_id):
+                raise ValueError(f"Target {target_id} existiert nicht.")
+
+            def scope_filter(host: str, tid: int = int(target_id)) -> bool:
+                return bool(scope_mod.check_asset(self.store, tid, host))
+
+        res = gb.import_report(path or "", min_hint_severity=min_severity or "high",
+                               scope_filter=scope_filter)
+        if not res.get("ok"):
+            return {
+                "ok": False, "empty": bool(res.get("empty")),
+                "error": res.get("error") or "Import fehlgeschlagen.",
+                "report_file": res.get("report_file") or "",
+                "findings": [], "hints": [], "persisted": 0,
+            }
+        findings = list(res.get("findings") or [])
+        hints = list(res.get("hints") or [])
+        persisted = 0
+        if target_id is not None:
+            run_id = "greenbone-" + _uuid.uuid4().hex[:12]
+            bundle = [gb.summary_finding(res["report"], res["report_file"])]
+            bundle.extend(findings)
+            bundle.extend(gb.hint_findings(hints))
+            for f in bundle:
+                rid = self.store.add_finding(
+                    int(target_id), run_id, f.agent, f.title, f.category,
+                    f.severity, asset=f.asset, description=f.description,
+                    evidence=f.evidence, dedup_key=f.dedup_key, status=f.status,
+                    false_positive=bool(f.false_positive))
+                if rid is not None:
+                    persisted += 1
+        return {
+            "ok": True, "empty": False,
+            "report_file": res["report_file"],
+            "summary": res["summary"],
+            "out_of_scope_skipped": res.get("out_of_scope_skipped", 0),
+            "persisted": persisted,
+            "findings": [_gb_finding_public(f) for f in findings],
+            "hints": hints,
+        }
+
+    def greenbone_scan(self, target_id: int, host: str, oversight_ack: Optional[bool],
+                       scan_config: str = "", wait_seconds: int = 0) -> dict:
+        """AKTIV: Scan gegen ein In-Scope-Einzelziel (Oversight + Scope Pflicht)."""
+        from . import greenbone as gb
+        if not self.store.get_target(target_id):
+            raise ValueError(f"Target {target_id} existiert nicht.")
+        cfg = scan_config or gb.DEFAULT_SCAN_CONFIG
+
+        def scope_check(h: str, tid: int = int(target_id)) -> bool:
+            return bool(scope_mod.check_asset(self.store, tid, h))
+
+        res = gb.start_scan(host, scope_check=scope_check,
+                            acknowledged=oversight_ack is True, scan_config=cfg)
+        if res.get("ok") and int(wait_seconds or 0) > 0:
+            res["status"] = gb.wait_for_scan(res["task_id"], int(wait_seconds))
+        return res
+
+    def greenbone_scan_status(self, task_id: str, import_report: bool = False,
+                              target_id: Optional[int] = None) -> dict:
+        """Lesend: Task-Status; bei fertigem Scan optional Report abholen + importieren."""
+        from . import greenbone as gb
+        st = gb.scan_status(task_id)
+        if st.get("ok") and import_report and st.get("done") and st.get("report_id"):
+            path = gb.fetch_report(st["report_id"])
+            st["import"] = self.greenbone_import(path=str(path), target_id=target_id)
+        return st
 
     def attack_log_list(self, limit: int = 50, run_id: str = "",
                         event_type: str = ""):
