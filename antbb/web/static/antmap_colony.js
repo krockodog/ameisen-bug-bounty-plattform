@@ -45,6 +45,8 @@
   antSprite.src = "/static/sprites/scout_tq.png";
   let antSpriteReady = false;
   antSprite.onload = function () { antSpriteReady = true; };
+  // Pheromonspuren je Tunnel-Laeufer (begrenzte Laenge, verblassend).
+  const antTrails = {};
 
   const SEVCOL = {
     critical: [255, 86, 86], high: [255, 150, 60], medium: [255, 206, 112],
@@ -314,6 +316,20 @@
       if (REDUCED) u = (i + 0.5) / np;
       const pt = bez(u);
       const a = 0.5 + 0.4 * Math.sin((u + i) * 3);
+      // Pheromonspur: verblassende Segmente hinter der laufenden Ameise.
+      if (!REDUCED) {
+        let tr = antTrails[i] || (antTrails[i] = []);
+        const lp = tr[tr.length - 1];
+        if (lp && Math.hypot(lp.x - pt.x, lp.y - pt.y) > 40) tr.length = 0; // Wrap -> neue Spur
+        tr.push({ x: pt.x, y: pt.y });
+        if (tr.length > 12) tr.shift();
+        for (let s = 0; s < tr.length - 1; s++) {
+          const ta = (s / tr.length) * 0.4 * a;
+          fctx.strokeStyle = "rgba(" + col[0] + "," + col[1] + "," + col[2] + "," + ta.toFixed(3) + ")";
+          fctx.lineWidth = 0.8 + (s / tr.length) * 1.6;
+          fctx.beginPath(); fctx.moveTo(tr[s].x, tr[s].y); fctx.lineTo(tr[s + 1].x, tr[s + 1].y); fctx.stroke();
+        }
+      }
       // weicher Pheromon-Schimmer unter der Ameise (dezent)
       glow(fctx, pt.x, pt.y, 8, col, 0.28 * a);
       if (antSpriteReady && !REDUCED) {

@@ -252,6 +252,18 @@ Umgesetzt:
   bei Netzausfall sauberer Fallback auf statische Infosec-Fakten (nie dauerhaft
   „Lädt …"). Optik im Ameisen-/Schwarz-Theme inkl. Scout-Ameisen entlang der
   Laufschrift; im Kolonie-Tunnel laufen animierte Ameisen zum Ziel.
+- ✅ Neuronales Gehirn: jeder echte Pentest-/Bugbounty-Lauf aus der
+  Run-Historie erscheint als leuchtender Ameisen-Knoten mit Hover-Tooltip
+  und verblassender Pheromonspur (`/static/brain/runs.js`, Daten aus
+  `GET /api/runs`). Im Kolonie-Tunnel hinterlassen die Späher ebenfalls
+  Pheromonspuren.
+
+
+- ✅ Neuronales Gehirn: jeder echte Pentest-/Bugbounty-Lauf aus der
+  Run-Historie (`/api/runs`) erscheint als leuchtende Ameise mit
+  Pheromonspur und Tooltip (Ziel, Zeitpunkt, Modus, Funde); neue Läufe
+  kommen automatisch hinzu. Auch die Tunnel-Ameisen der Kolonie-Karte
+  hinterlassen nun eine verblassende Pheromonspur.
 
 
 Offen / Ideen:
