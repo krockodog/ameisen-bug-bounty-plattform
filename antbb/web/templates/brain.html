@@ -124,6 +124,47 @@
   .bp-detail-box table { width:100%; border-collapse:collapse; font-size:.78rem; }
   .bp-detail-box td { padding:.2rem .3rem; border-bottom:1px solid #1d2740; }
   .bp-kv { color:#8a92a6; }
+
+  /* Soldaten-Detail (Playbooks / SKILL.md) — Premium-Panel */
+  .bp-detail.sol-wide .bp-detail-box { max-width: 780px; }
+  .sol-detail { display:flex; flex-direction:column; gap:.55rem; }
+  .sol-hero { display:flex; gap:.7rem; align-items:flex-start; }
+  .sol-ant { font-size:1.8rem; filter:drop-shadow(0 0 10px rgba(176,77,255,.45)); }
+  .sol-hero h3 { margin:0 0 .15rem; color:#cfefff; }
+  .sol-sub { display:flex; gap:.4rem; align-items:center; color:#8a92a6; font-size:.75rem; }
+  .sol-sub code { color:#9fd0ff; background:#101726; padding:.05rem .35rem; border-radius:4px; }
+  .sol-role { color:#9fb0cc; margin:.25rem 0 0; font-size:.8rem; }
+  .sol-stats { display:flex; flex-wrap:wrap; gap:.35rem; }
+  .sol-stat { background:#101726; border:1px solid #1d2740; border-radius:8px;
+    padding:.15rem .5rem; color:#9fd0ff; font-size:.72rem; }
+  .sol-stat b { color:#cfefff; margin-right:.2rem; }
+  .sol-tabs { display:flex; gap:.3rem; border-bottom:1px solid #1d2740; padding-bottom:.3rem; }
+  .sol-tabs button { background:#101726; color:#8a92a6; border:1px solid #1d2740;
+    border-radius:5px; padding:.2rem .55rem; margin:0; font-size:.76rem; cursor:pointer; }
+  .sol-tabs button.active { background:#17233c; color:#9fd0ff; border-color:#38507e;
+    box-shadow:0 0 12px rgba(56,224,255,.12); }
+  .sol-pb { background:rgba(16,23,38,.7); border:1px solid #1d2740; border-radius:8px;
+    padding:.45rem .6rem; margin:.35rem 0; }
+  .sol-pb.off { border-color:rgba(255,61,240,.28); }
+  .sol-pb.def { border-color:rgba(56,224,255,.22); }
+  .sol-pb-head { display:flex; justify-content:space-between; gap:.5rem; align-items:center; }
+  .pb-mode { font-size:.68rem; color:#8fd; border:1px solid rgba(56,224,255,.3);
+    border-radius:999px; padding:.05rem .45rem; }
+  .pb-mode.offensive { color:#f8a; border-color:rgba(255,61,240,.4); }
+  .sol-pb-desc { color:#9fb0cc; font-size:.76rem; margin:.25rem 0; }
+  .sol-tools { display:flex; flex-wrap:wrap; gap:.25rem; margin:.2rem 0; }
+  .sol-tools .chip, .sol-detail .chip { background:#0d1524; border:1px solid #243049;
+    color:#9fd0ff; border-radius:999px; padding:.05rem .45rem; font-size:.68rem; }
+  .sol-tasks { margin:.2rem 0 .1rem 1.1rem; color:#cfe7ff; font-size:.76rem; }
+  .sol-tasks li { margin:.1rem 0; }
+  .skill-md { font-size:.78rem; color:#c9d1d9; line-height:1.45; }
+  .skill-md h1,.skill-md h2,.skill-md h3 { color:#cfefff; margin:.5rem 0 .25rem; }
+  .skill-meta { display:flex; gap:.4rem; font-size:.72rem; color:#8a92a6; margin:.15rem 0; }
+  .skill-meta span { color:#79c0ff; min-width:5rem; }
+  .skill-pre { background:#0a101c; border:1px solid #1d2740; border-radius:6px;
+    padding:.5rem .65rem; overflow:auto; font-size:.72rem; color:#c9d1d9; }
+  .sol-actions { margin-top:.4rem; border-top:1px solid #1d2740; padding-top:.45rem; }
+
   @media (prefers-reduced-motion: reduce){ .bp-badge.läuft,.bp-badge.hängt{animation:none} }
 </style>
 
@@ -141,8 +182,8 @@
   mountBrain(el);
 </script>
 <script src="/static/brain/nodes-panel.js"></script>
-<!-- 🐜 Pentest-/Bugbounty-Runs als leuchtende Ameisen-Knoten (echte Run-Historie) -->
+<!-- 🐜 Offensive Kolonie: Pentest-/Bugbounty-/WLAN-Runs (echte Historie). Blue Queen → /blue -->
 <script src="/static/brain/runs.js"></script>
-<!-- 🐜 Ameisenvolk-Overlay (Königin + 18 Soldaten als sichtbare Sprites) -->
+<!-- 🐜 Ameisenvolk-Overlay (offensive Königin + Soldaten; kein Blue Queen) -->
 <script src="/static/brain/ants.js"></script>
 {% endblock %}

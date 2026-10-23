@@ -1,6 +1,9 @@
 """Neuronales Gehirn der Königin — Node-/Log-Lesezugriff + HUMAN-ONLY
 Lösch-/Reset-Operationen.
 
+Blue Queen (colony=blue) hat eine eigene Ansicht unter /blue und erscheint
+nicht im Brain-Graph.
+
 ================================ WICHTIG =================================
 Die LÖSCH- und RESET-Funktionen in diesem Modul sind AUSSCHLIESSLICH für
 einen Menschen über die Neuronales-Gehirn-GUI gedacht ("human-only").
@@ -40,6 +43,19 @@ HUMAN_CONFIRM_PROMPT = (
 class HumanConfirmError(PermissionError):
     """Wird geworfen, wenn eine Lösch-/Reset-Operation ohne ausdrückliches
     menschliches Bestätigungs-Flag versucht wird (default-deny)."""
+
+
+def _is_blue_agent(name: Optional[str]) -> bool:
+    """Blue-Queen-Soldaten (colony=blue) – gehören NICHT ins Neuronale Gehirn."""
+    n = (name or "").strip().lower()
+    return n.startswith("blue-") or n.startswith("blue_")
+
+
+def _is_blue_run_id(run_id: Optional[str]) -> bool:
+    """Blue-Queen-Läufe (run_id blue-…) – eigene Ansicht /blue, nicht /brain."""
+    r = (run_id or "").strip().lower()
+    return r.startswith("blue-") or r.startswith("blue_")
+
 
 
 def _audit_path(store: Store) -> str:
@@ -140,9 +156,11 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
             "created_at": t["created_at"], "created_fmt": _fmt(t["created_at"]),
         })
 
-    # Runs (je Target) + Log-Gruppen-Node je Run
+    # Runs (je Target) + Log-Gruppen-Node je Run — Blue-Queen-Läufe auslassen
     for r in store.list_scan_runs():
         rid = str(r["run_id"])
+        if _is_blue_run_id(rid):
+            continue
         nid = f"run:{rid}"
         tnid = f"target:{int(r['target_id'])}"
         steps = store.count_run_steps(rid)
@@ -160,7 +178,10 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
     # Findings (gekappt pro Aufruf für vernünftige Payload)
     sev_rank = {"critical": 4, "high": 3, "medium": 2, "low": 1, "info": 0}
     soldier_seen: set[str] = set()
-    all_findings = store.list_findings()
+    # Brain = offensive Kolonie. Blue Queen bleibt unter /blue.
+    all_findings = [f for f in store.list_findings()
+                    if not _is_blue_agent(f["agent"])
+                    and not _is_blue_run_id(f["run_id"] if "run_id" in f.keys() else None)]
     for f in all_findings[:400]:
         fid = int(f["id"])
         nid = f"finding:{fid}"
@@ -177,11 +198,13 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
         edges.append({"from": snid, "to": nid, "kind": "soldier-finding"})
         soldier_seen.add(agent)
 
-    # Soldaten/Capabilities aus der Registry (aktive Fähigkeiten der Königin)
+    # Soldaten/Capabilities — Blue Queen (colony=blue) hat eigene Ansicht /blue.
     try:
-        reg = registry_mod.build_registry()
+        reg = registry_mod.build_registry(include_blue=False)
         for s in reg.get("soldiers", []):
             name = s.get("name", "")
+            if _is_blue_agent(name) or s.get("colony") == "blue":
+                continue
             snid = f"soldier:{name}"
             fcount = sum(1 for f in all_findings if (f["agent"] or "") == name)
             nodes.append({
@@ -195,10 +218,13 @@ def nodes_graph(store: Store, log_cap: int = 50) -> dict:
         pass
     # Soldaten, die Funde haben, aber nicht in der Registry stehen
     for name in sorted(soldier_seen):
+        if _is_blue_agent(name):
+            continue
         nodes.append({"id": f"soldier:{name}", "type": "soldier", "label": name,
                       "status": "aktiv", "severity": None, "counts": {}})
 
-    stuck = [str(r["run_id"]) for r in store.list_stuck_runs()]
+    stuck = [str(r["run_id"]) for r in store.list_stuck_runs()
+             if not _is_blue_run_id(str(r["run_id"]))]
     counts = {
         "targets": len(targets),
         "runs": len(store.list_scan_runs()),
@@ -251,8 +277,33 @@ def node_detail(store: Store, ntype: str, nid: str) -> dict:
         return {"ok": True, "type": "finding", "finding": d,
                 "logs": [_log_row(l) for l in logs]}
     if ntype == "soldier":
-        findings = [f for f in store.list_findings() if (f["agent"] or "") == nid]
+        if _is_blue_agent(nid):
+            return {"ok": False, "reason": "blue_queen_separate",
+                    "hint": "Blue Queen hat eigene Ansicht unter /blue"}
+        findings = [f for f in store.list_findings()
+                    if (f["agent"] or "") == nid and not _is_blue_run_id(
+                        f["run_id"] if "run_id" in f.keys() else None)]
+        # Playbooks + SKILL.md aus der Capability-Registry.
+        role = specialty = ""
+        colony = None
+        playbooks: list = []
+        skill: dict = {}
+        try:
+            from . import registry as _reg
+            sol = next((s for s in _reg.build_registry(include_blue=False)["soldiers"]
+                        if s.get("name") == nid), None)
+            if sol:
+                role = sol.get("role") or ""
+                specialty = sol.get("specialty") or ""
+                colony = sol.get("colony")
+                playbooks = list(sol.get("playbooks") or [])
+                skill = dict(sol.get("skill") or {})
+        except Exception:
+            pass
         return {"ok": True, "type": "soldier", "name": nid,
+                "role": role, "specialty": specialty, "colony": colony,
+                "playbooks": playbooks, "skill": skill,
+                "playbook_count": len(playbooks),
                 "finding_count": len(findings),
                 "findings": [{"id": f["id"], "title": f["title"],
                               "severity": f["severity"], "status": f["status"],

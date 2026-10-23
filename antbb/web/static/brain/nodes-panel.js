@@ -13,6 +13,15 @@
     soldier: "🐜 Soldaten" };
   const TYPE_ORDER = ["run", "target", "soldier", "finding"];
 
+  // Blue Queen hat eigene Ansicht (/blue) — nie im Brain-Panel listen.
+  function isBlueSoldier(n) {
+    if (!n) return false;
+    if (n.colony === "blue") return true;
+    const name = String(n.label || n.id || "").replace(/^soldier:/, "").toLowerCase();
+    return name.startsWith("blue") || name.startsWith("blue-") ||
+      ["defense", "hardening", "honeypot", "remediation", "swscan"].includes(name);
+  }
+
   // Menschliche Bestätigung inkl. Backup-Hinweis.
   function humanConfirm(msg) {
     return window.confirm(
@@ -60,7 +69,10 @@
     const host = $("bp-nodes");
     host.innerHTML = "";
     const byType = {};
-    nodes.forEach((n) => { (byType[n.type] = byType[n.type] || []).push(n); });
+    nodes.forEach((n) => {
+      if (n.type === "soldier" && isBlueSoldier(n)) return;
+      (byType[n.type] = byType[n.type] || []).push(n);
+    });
     TYPE_ORDER.forEach((t) => {
       const list = byType[t];
       if (!list || !list.length) return;
@@ -96,6 +108,14 @@
         row.appendChild(rb);
       }
     } else if (n.type === "soldier") {
+      const pb = (n.counts && n.counts.playbooks) || 0;
+      if (pb) {
+        const badge = document.createElement("span");
+        badge.className = "bp-badge";
+        badge.title = pb + " Playbooks";
+        badge.textContent = pb + " PB";
+        row.appendChild(badge);
+      }
       const rb = document.createElement("button");
       rb.className = "bp-reset"; rb.textContent = "⟲";
       rb.title = "Soldat-Anzeige zurücksetzen (human-only)";
@@ -119,7 +139,9 @@
     if (!res.ok) { body.innerHTML = "<p>Nicht gefunden.</p>"; }
     else { body.innerHTML = detailHtml(res.body, n); }
     $("bp-detail").style.display = "flex";
+    $("bp-detail").classList.toggle("sol-wide", !!(res.body && res.body.type === "soldier"));
     wireDetailActions(res.body, n);
+    wireSoldierTabs(body);
   }
 
   function esc(s) { return (s == null ? "" : String(s)).replace(/[&<>"]/g,
@@ -167,16 +189,157 @@
       return h;
     }
     if (d.type === "soldier") {
-      let h = `<h3>🐜 ${esc(d.name)}</h3><p>${d.finding_count} Funde</p>`;
-      h += `<p><button class="bp-reset" data-act="reset-agent" data-id="${esc(d.name)}">⟲ Anzeige zurücksetzen</button></p>`;
-      if (d.findings.length) {
-        h += "<table>";
-        d.findings.forEach((f) => { h += `<tr><td class="bp-kv">[${esc(f.severity)}]</td><td>${esc(f.title)}</td></tr>`; });
-        h += "</table>";
-      }
-      return h;
+      return soldierDetailHtml(d);
     }
     return "<p>—</p>";
+  }
+
+  /** Kleiner sicherer Markdown→HTML-Renderer für SKILL.md (kein HTML aus Quelle). */
+  function mdLite(src) {
+    const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    let html = "", inCode = false, inUl = false, inOl = false;
+    const closeLists = () => {
+      if (inUl) { html += "</ul>"; inUl = false; }
+      if (inOl) { html += "</ol>"; inOl = false; }
+    };
+    const inline = (s) => esc(s)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    for (let i = 0; i < lines.length; i++) {
+      const raw = lines[i];
+      if (raw.trim().startsWith("```")) {
+        if (inCode) { html += "</code></pre>"; inCode = false; }
+        else { closeLists(); html += "<pre class='skill-pre'><code>"; inCode = true; }
+        continue;
+      }
+      if (inCode) { html += esc(raw) + "\n"; continue; }
+      if (/^---+$/.test(raw.trim()) && i < 8) { closeLists(); continue; } // YAML-Frontmatter-Trenner
+      if (/^(name|description|version|source|license)\s*:/.test(raw) && i < 12) {
+        closeLists();
+        const m = raw.match(/^(\w+)\s*:\s*(.*)$/);
+        if (m) html += `<div class="skill-meta"><span>${esc(m[1])}</span>${inline(m[2].replace(/^"|"$/g,""))}</div>`;
+        continue;
+      }
+      const hm = raw.match(/^(#{1,4})\s+(.*)$/);
+      if (hm) {
+        closeLists();
+        const lvl = hm[1].length;
+        html += `<h${lvl + 2} class="skill-h">${inline(hm[2])}</h${lvl + 2}>`;
+        continue;
+      }
+      if (/^>\s?/.test(raw)) {
+        closeLists();
+        html += `<blockquote class="skill-quote">${inline(raw.replace(/^>\s?/, ""))}</blockquote>`;
+        continue;
+      }
+      if (/^[-*]\s+/.test(raw)) {
+        if (!inUl) { closeLists(); html += "<ul class='skill-ul'>"; inUl = true; }
+        html += `<li>${inline(raw.replace(/^[-*]\s+/, ""))}</li>`;
+        continue;
+      }
+      if (/^\d+\.\s+/.test(raw)) {
+        if (!inOl) { closeLists(); html += "<ol class='skill-ol'>"; inOl = true; }
+        html += `<li>${inline(raw.replace(/^\d+\.\s+/, ""))}</li>`;
+        continue;
+      }
+      if (!raw.trim()) { closeLists(); continue; }
+      closeLists();
+      html += `<p class="skill-p">${inline(raw)}</p>`;
+    }
+    closeLists();
+    if (inCode) html += "</code></pre>";
+    return html || "<p class='bp-hint'>_(SKILL.md leer)_</p>";
+  }
+
+  function soldierDetailHtml(d) {
+    const pbs = d.playbooks || [];
+    const sk = d.skill || {};
+    const skillMd = sk.skill_md || "";
+    const title = d.specialty || d.name;
+    let h = `<div class="sol-detail">
+      <div class="sol-hero">
+        <span class="sol-ant" aria-hidden="true">🐜</span>
+        <div>
+          <h3>${esc(title)}</h3>
+          <div class="sol-sub"><code>${esc(d.name)}</code>
+            ${d.colony === "blue" ? '' : '<span class="pb-mode">⚔ red</span>'}
+          </div>
+          <p class="sol-role">${esc(d.role || sk.summary || "")}</p>
+        </div>
+      </div>
+      <div class="sol-stats">
+        <span class="sol-stat"><b>${pbs.length}</b> Playbooks</span>
+        <span class="sol-stat"><b>${(sk.task_count != null ? sk.task_count : pbs.reduce((n,p)=>n+(p.task_items||[]).length,0))}</b> Aufgaben</span>
+        <span class="sol-stat"><b>${d.finding_count || 0}</b> Funde</span>
+        <span class="sol-stat">${skillMd ? "SKILL.md ✓" : "kein SKILL.md"}</span>
+      </div>
+      <div class="sol-tabs">
+        <button type="button" class="active" data-sol-tab="playbooks">Playbooks</button>
+        <button type="button" data-sol-tab="skill">SKILL.md</button>
+        <button type="button" data-sol-tab="findings">Funde</button>
+      </div>
+      <div data-sol-pane="playbooks">`;
+    if (!pbs.length) {
+      h += `<p class="bp-hint">Keine Playbooks in der Registry — ehrlicher Leerzustand.</p>`;
+    } else {
+      pbs.forEach((pb) => {
+        const tasks = pb.task_items || [];
+        h += `<div class="sol-pb ${pb.mode === "offensive" ? "off" : "def"}">
+          <div class="sol-pb-head">
+            <strong>${esc(pb.name)}</strong>
+            <span class="pb-mode ${pb.mode || ""}">${esc(pb.mode || "defensive")}${pb.oversight_required ? " · OVERSIGHT" : ""}</span>
+          </div>
+          <p class="sol-pb-desc">${esc(pb.description || "")}</p>`;
+        if (pb.tools && pb.tools.length) {
+          h += `<div class="sol-tools">${pb.tools.map((t) => `<span class="chip">${esc(t)}</span>`).join("")}</div>`;
+        }
+        if (tasks.length) {
+          h += `<ol class="sol-tasks">`;
+          tasks.forEach((ti) => {
+            const t = (typeof ti === "string") ? ti : (ti.task || "");
+            const ov = (typeof ti === "object" && ti.oversight) ? " 🔒" : "";
+            h += `<li>${esc(t)}${ov}</li>`;
+          });
+          h += `</ol>`;
+        }
+        h += `</div>`;
+      });
+    }
+    h += `</div>
+      <div data-sol-pane="skill" style="display:none">
+        <div class="skill-md">${skillMd ? mdLite(skillMd) : "<p class='bp-hint'>Kein SKILL.md für diesen Soldaten hinterlegt.</p>"}</div>
+      </div>
+      <div data-sol-pane="findings" style="display:none">`;
+    if (!(d.findings || []).length) {
+      h += `<p class="bp-hint">Noch keine Funde dieses Soldaten.</p>`;
+    } else {
+      h += "<table>";
+      d.findings.forEach((f) => {
+        h += `<tr><td class="bp-kv">[${esc(f.severity)}]</td><td>${esc(f.title)}</td></tr>`;
+      });
+      h += "</table>";
+    }
+    h += `</div>
+      <p class="sol-actions">
+        <button class="bp-reset" data-act="reset-agent" data-id="${esc(d.name)}">⟲ Anzeige zurücksetzen</button>
+      </p>
+    </div>`;
+    return h;
+  }
+
+  function wireSoldierTabs(body) {
+    const tabs = body.querySelectorAll("[data-sol-tab]");
+    if (!tabs.length) return;
+    tabs.forEach((btn) => {
+      btn.onclick = () => {
+        tabs.forEach((x) => x.classList.remove("active"));
+        btn.classList.add("active");
+        body.querySelectorAll("[data-sol-pane]").forEach((p) => {
+          p.style.display = p.getAttribute("data-sol-pane") === btn.getAttribute("data-sol-tab") ? "" : "none";
+        });
+      };
+    });
   }
 
   function logsHtml(logs) {
@@ -295,6 +458,12 @@
     $("bp-log-del").onclick = deleteLogs;
     document.querySelectorAll(".bp-tabs button").forEach((b) =>
       b.onclick = () => switchTab(b.getAttribute("data-tab")));
+    // Ameisen-Overlay: Klick auf Soldat öffnet dieselbe Detailansicht (Playbooks/SKILL).
+    window.addEventListener("antbb-open-soldier", (ev) => {
+      const name = ev && ev.detail && ev.detail.name;
+      if (!name) return;
+      openDetail({ id: "soldier:" + name, type: "soldier", label: name });
+    });
     loadNodes();
     setInterval(loadNodes, 15000); // Lauf-/Hänge-Status aktuell halten
   }
