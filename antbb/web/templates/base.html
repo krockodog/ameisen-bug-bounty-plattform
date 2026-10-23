@@ -7,7 +7,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}antbb 🐜{% endblock %}</title>
+    <title>{% block title %}Blue Queen{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <style>
     /* Zufällig gewählter Hintergrund (.webp bevorzugt, .jpg als Fallback) */
@@ -32,8 +32,8 @@
 </head>
 <body class="{% block body_class %}{% endblock %}" data-colony="{{ _colony_pick }}">
   <header>
-    <h1>🐜 antbb – Ameisen-Schwarm Bug-Bounty <span class="badge">lokal · simuliert</span></h1>
-    <nav><a href="/">Scope-Manager</a> · <a href="/blue">🛡 Blue Queen</a> · <a href="/wlan">📡 WLAN</a> · <a href="/brain">🧠 Neuronales Gehirn</a> · <a href="/assets">🔒 Eigene Assets</a> · <a href="/history">🗂️ Historie</a></nav>
+    <h1>🛡 Blue Queen <span class="badge">Verteidigungs-Kolonie · lokal</span></h1>
+    <nav><a href="/blue">Kolonie</a> · <a href="/scope">Scope &amp; Oversight</a> · <a href="/history">Historie</a> · <a href="/providers">Provider</a> · <a href="/assets">Eigene Assets</a></nav>
   </header>
   <main>
     {% block content %}{% endblock %}

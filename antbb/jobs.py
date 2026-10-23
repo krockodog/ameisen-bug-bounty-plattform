@@ -9,11 +9,15 @@ Unterstützte Job-Arten (`kind`):
   * hardening  – Hardening-Audit (read-only)
   * remediate  – Remediation-Verify über vorhandene Findings
   * colony     – voller Blue-Queen-Lauf (alle Phasen, read-only)
+  * patching · firewall · identity · tls · logs · backup · watcher · attacklog
+    · greenbone – je ein Spezial-Soldat
+    (greenbone: importiert den neuesten Report aus data/greenbone/, startet NIE einen Scan)
 """
 from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from typing import Optional
 
@@ -21,13 +25,17 @@ from .agents.blue import BLUE_PHASES
 from .blue_queen import BlueQueen
 from .store import Store
 
-VALID_KINDS = frozenset({"swscan", "hardening", "remediate", "colony"})
+VALID_KINDS = frozenset({
+    "swscan", "hardening", "remediate", "colony", "patching", "firewall",
+    "identity", "tls", "logs", "backup", "watcher", "attacklog", "greenbone",
+})
 
 _KIND_PHASES = {
     "swscan": ("assess",),
     "hardening": ("assess", "harden"),
     "remediate": ("remediate", "verify"),
     "colony": BLUE_PHASES,
+    "greenbone": ("assess", "remediate"),
 }
 
 #: Optionale Agenten-Filter je Job-Art (None = alle Soldaten der Phase).
@@ -36,6 +44,7 @@ _KIND_AGENTS = {
     "hardening": ("blue-hardening",),
     "remediate": ("blue-remediation",),
     "colony": None,
+    "greenbone": ("blue-greenbone",),
 }
 
 
@@ -83,8 +92,11 @@ class JobScheduler:
             params = {}
         started = time.time()
         try:
+            use_llm = os.environ.get("ANTBB_NO_LLM", "").strip().lower() not in (
+                "1", "true", "yes", "on",
+            )
             queen = BlueQueen(self.store, logger=self.logger, emit=self.emit,
-                              use_llm=False)
+                              use_llm=use_llm)
             # Job-Art kann auf einzelne Soldaten eingrenzen.
             only = _KIND_AGENTS.get(kind)
             if only:

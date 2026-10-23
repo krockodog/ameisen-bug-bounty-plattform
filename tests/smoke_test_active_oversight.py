@@ -44,8 +44,6 @@ banner("TEST 0: zentrale Konsistenz (ein Text ueberall)")
 check("Rechtshinweis enthaelt §202a-c", "202a-c" in ACTIVE_LEGAL_NOTICE)
 check("Rechtshinweis enthaelt CFAA", "Computer Fraud" in ACTIVE_LEGAL_NOTICE)
 check("Prompt nennt Human Oversight", "Human Oversight" in ACTIVE_OVERSIGHT_PROMPT)
-from antbb.wlan_offensive import LEGAL_NOTICE as WLAN_NOTICE
-check("WLAN-Offensiv nutzt DENSELBEN Rechtshinweis", WLAN_NOTICE == ACTIVE_LEGAL_NOTICE)
 check("Trigger-Erkennung: active", active_trigger_requested(active=True))
 check("Trigger-Erkennung: fuzz", active_trigger_requested(fuzz=True))
 check("Trigger-Erkennung: offensive", active_trigger_requested(offensive=True))
@@ -77,31 +75,7 @@ banner("TEST 4: Service — programmatisch (ack=None) bleibt rueckwaertskompatib
 res_compat = svc.run_scan(tid, phases=("scan",), fuzz=True, use_llm=False)  # kein ack
 check("ack=None: aktiver Lauf lief (kompatibel)", bool(res_compat.run_id))
 
-banner("TEST 5: WLAN-Offensiv — Engagement-Gate (Oversight) default-deny")
-# ohne Engagement:
-r = svc.wlan_offensive_run("handshake-capture", bssid="aa:bb:cc:dd:ee:ff",
-                           ssid="demo", dry_run=True)
-check("WLAN ohne Engagement: blockiert", r["allowed"] is False)
-check("WLAN ohne Engagement: kein Tool-Aufruf", r["tool_invoked"] is False)
-# Engagement OHNE Oversight:
-eid = svc.wlan_engagement_create("demo", bssids=["aa:bb:cc:dd:ee:ff"], ssids=["demo"],
-                                 oversight=False)
-r2 = svc.wlan_offensive_run("handshake-capture", bssid="aa:bb:cc:dd:ee:ff",
-                            ssid="demo", dry_run=True)
-# ANTBB_WIFI nicht gesetzt -> ebenfalls gesperrt; in jedem Fall nicht erlaubt.
-check("WLAN Engagement ohne Oversight: blockiert", r2["allowed"] is False)
-check("WLAN Engagement ohne Oversight: kein Tool-Aufruf", r2["tool_invoked"] is False)
-# Oversight setzen + ANTBB_WIFI=1 -> Gate bestanden (honest-empty, kein echtes Tool).
-svc.wlan_engagement_oversight(eid, True)
-os.environ["ANTBB_WIFI"] = "1"
-import antbb.wlan_offensive as _wo  # Freischaltung liest ENV zur Laufzeit
-r3 = svc.wlan_offensive_run("handshake-capture", bssid="aa:bb:cc:dd:ee:ff",
-                            ssid="demo", dry_run=True)
-check("WLAN mit Oversight+ANTBB_WIFI: Gate bestanden", r3["allowed"] is True)
-check("WLAN mit Oversight: kein echtes Tool im dry_run", r3["tool_invoked"] is False)
-os.environ.pop("ANTBB_WIFI", None)
-
-banner("TEST 6: Web — HTML- und JSON-Scan-Routen serverseitig")
+banner("TEST 5: Web — HTML- und JSON-Scan-Routen serverseitig")
 try:
     from starlette.testclient import TestClient
 except Exception:

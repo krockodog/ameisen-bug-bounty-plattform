@@ -1,41 +1,32 @@
-# antbb – Schnellstart (GitHub-Distribution)
+# Blue Queen – Start
 
-Keyfreie, anonymisierte Version **ohne Secrets und ohne persönliche Daten**.
+Keyfrei. Keine Schlüssel und keine personenbezogenen Daten in diesem Baum.
 
-## Voraussetzungen
+## Voraussetzung
 
-- Python **3.11–3.13** (`python3`)
-- Internet (einmalig für `pip install`)
+Python 3.11–3.13.
 
 ## Ein Befehl
 
 ```bash
-unzip antbb-clean-*.zip -d antbb && cd antbb
-bash install-and-start.sh
+./run.sh
 ```
 
-Ausgabe z. B. `Startseite: http://127.0.0.1:8000/`  
-`./run.sh` ist ein Wrapper. Port: `ANTBB_PORT=1001 bash install-and-start.sh`
+Das öffnet die Kolonie, zum Beispiel `http://127.0.0.1:8000/blue`.
+Anderer Port: `ANTBB_PORT=1001 ./run.sh`.
 
-## Optional: KI-Anbieter (interaktiv)
+Scope und Oversight liegen unter `/scope`.
 
-Das Script fragt nach den bekanntesten Anbietern:
+## Provider (optional)
 
-OpenAI · Anthropic · Google/Gemini · MiniMax · Grok/xAI · Kimi/Moonshot · Ollama · OpenCode · Eigener Anbieter
+Der Installer kann nach einem Provider fragen. Enter heißt: ohne Key starten.
+Die Kolonie läuft dann ohne externen Dienst. Was ich eingebe, landet nur in
+der lokalen `antbb.env` (nicht im Git). Vorlage: `antbb.env.example`.
 
-Pro Anbieter: **[1] API-Schlüssel** (→ lokale `antbb.env`, `chmod 600`) oder **[2] OAuth**
-nur dort, wo wirklich verdrahtet (aktuell: OpenAI über die Web-GUI nach dem Start).
-Wo kein OAuth existiert (MiniMax, Kimi Open Platform, Ollama, …), sagt das Script
-ehrlich „OAuth nicht verfügbar“ — nichts wird vorgetäuscht.
+Ohne TTY oder mit `ANTBB_ASK_KEY=0` entfällt die Frage.
 
-- **Enter** = ohne Key starten (Plattform läuft, KI inaktiv).
-- Es werden **nur** Variablen geschrieben, die du wirklich eingibst (keine leere `KIMI_`/`MOONSHOT_`-Variable).
-- `antbb.env` steht in `.gitignore`. Vorlage: `antbb.env.example` (nur Kommentare/Platzhalter).
+`ANTBB_NO_LLM=1` schaltet den Router aus, auch wenn ein Key gesetzt ist.
 
-Non-interactive: `ANTBB_ASK_KEY=0 bash install-and-start.sh`
+## Recht
 
-MiniMax-Host: `https://api.minimax.io` — Key nur zur Laufzeit als `MINIMAX_API_KEY`.
-
-## Bewusst entfernt
-
-Keine API-Keys/Tokens/Passwörter · keine persönlichen Daten · keine echten Scope-Ziele/Reports/Captures · `data/` startet leer · kein `external/`-Upstream.
+Nur an Systemen, die ich prüfen darf. § 202a–c StGB, CFAA.

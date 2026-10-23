@@ -63,6 +63,8 @@ TOOL_SPECS: dict[str, dict] = {
     "searchsploit": {"offensive": False, "desc": "Lokale Exploit-DB-Suche (searchsploit), nur REFERENZ"},
     "sherlock":   {"offensive": False, "desc": "OSINT: Username-Enumeration über soziale Netze (rein lesend, REFERENZ)"},
     "maigret":    {"offensive": False, "desc": "OSINT: Username-Enumeration (Fallback für sherlock, rein lesend, REFERENZ)"},
+    "gvm-cli":    {"offensive": True,  "desc": "Greenbone/OpenVAS (GVM) Client: Scan-Start nur mit Oversight und Scope; Report-Import bleibt defensiv"},
+    "gvmd":       {"offensive": False, "desc": "Greenbone Management Daemon (lokaler Dienst; nur Erkennung, wir starten ihn nie)"},
     "msfconsole": {"offensive": True,  "desc": "Metasploit – NUR auxiliary/scanner-Module (hart allowlisted)"},
 }
 

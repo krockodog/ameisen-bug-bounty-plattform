@@ -407,10 +407,11 @@
     const host = document.getElementById("octogent-phases");
     if (!host) return;
     const phases = reg.blue_phases || ["assess","harden","defend","remediate","verify"];
-    const labels = {assess:"Assess", harden:"Harden", defend:"Defend",
+    const labels = {assess:"Assess", watch:"Watch", harden:"Harden", defend:"Defend",
                     remediate:"Remediate", verify:"Verify"};
     const notes = {
       assess: "Inventar & Lücken lesen",
+      watch: "Beobachten, Detection, Logs",
       harden: "Härtung prüfen / vorschlagen",
       defend: "Detection & Decoys",
       remediate: "Finding → Fix-Plan",

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # antbb – All-in-One: venv + deps + frische DB + Web-GUI
 # Ein Befehl:  bash install-and-start.sh
-# Optional interaktiv: KI-Anbieter wählen → API-Key oder OAuth-Hinweis.
+# Optional interaktiv: Provider für die Orchestrierung (Key nur zur Laufzeit).
 # Keys nur in lokale antbb.env (chmod 600), nie Code/Log. Enter = ohne Key.
 #
 # ROBUSTHEIT: KEIN globales `set -e`. Jeder optionale Schritt ist gekapselt und
@@ -23,7 +23,7 @@ cd "$ROOT" || { printf 'FATAL: konnte nicht nach ROOT wechseln\n' >&2; exit 1; }
 
 HOST="${ANTBB_HOST:-${ANTBB_WEB_HOST:-127.0.0.1}}"
 PORT="${ANTBB_PORT:-${ANTBB_WEB_PORT:-8000}}"
-URL="http://${HOST}:${PORT}/"
+URL="http://${HOST}:${PORT}/blue"
 VENV="${ROOT}/.venv"
 REQ="${ROOT}/requirements.txt"
 DB_PATH="${ANTBB_DB:-${ROOT}/data/antbb.db}"
@@ -148,14 +148,14 @@ _ask_providers() {
     warn "Später: bash install-and-start.sh  (mit TTY) oder antbb.env.example → antbb.env"
     return 0
   fi
-  printf '\n\033[1;36mKI-Anbieter einrichten (optional, komplett überspringbar)\033[0m\n'
-  printf '  Ohne Key läuft die Plattform – nur KI-Features sind dann inaktiv.\n'
+  printf '\n\033[1;36mProvider für die Orchestrierung (optional, überspringbar)\033[0m\n'
+  printf '  Ohne Key läuft die Kolonie. Der Router bleibt dann ohne externen Dienst.\n'
   printf '  Mehrfachauswahl möglich (z. B. 1 4 5). Enter = gar keine Anbieter.\n\n'
   printf '  [1] OpenAI\n  [2] Anthropic\n  [3] Google (Gemini)\n  [4] MiniMax          (api.minimax.io)\n'
   printf '  [5] Grok / xAI\n  [6] Kimi / Moonshot\n  [7] Ollama           (lokal, keine Auth)\n  [8] OpenCode\n  [9] Eigener Anbieter (Custom OpenAI-kompatibel)\n\n'
   printf '  Auswahl (Nummern oder Enter): '
   local sel; IFS= read -r sel || true
-  if [ -z "${sel// /}" ]; then warn "Keine Anbieter gewählt – starte ohne KI-Keys."; return 0; fi
+  if [ -z "${sel// /}" ]; then warn "Keine Anbieter gewählt – starte ohne Provider-Keys."; return 0; fi
   local n
   for n in $sel; do
     case "$n" in
@@ -418,19 +418,9 @@ _system_bootstrap() {
     _safe "install-$b" _install_tool "$b" "$b"
   done
 
-  # Optional: Pentest-Tools + Wortlisten + Remote-Clients (ANTBB_FULL=1).
+  # Diese Ausgabe ist die Verteidigungs-Kolonie. Keine Angriffs-Werkzeuge.
   if [ "${ANTBB_FULL:-0}" = "1" ]; then
-    say "ANTBB_FULL=1 → zusätzlich Pentest-Tools, Wortlisten & Remote-Clients (best effort)"
-    local t
-    for t in nmap iw nmcli ffuf gobuster nikto wpscan aircrack-ng hcxdumptool hashcat mdk4; do
-      _safe "install-$t" _install_tool "$t" "$t"
-    done
-    _safe "install-seclists" _install_wordlists_seclists
-    _safe "install-rockyou"  _install_wordlists_rockyou
-    _safe "install-tailscale"   _install_tailscale
-    _safe "install-cloudflared" _install_cloudflared
-  else
-    warn "Nur Basis-Pakete. Für Pentest-Tools + Wortlisten: ANTBB_FULL=1 bash install-and-start.sh"
+    warn "ANTBB_FULL installiert hier keine Angriffs-Werkzeuge und keine Wortlisten."
   fi
 }
 
@@ -548,9 +538,9 @@ if [ -n "${REMOTE_MODE:-}" ]; then
 fi
 
 if [ -z "${MINIMAX_API_KEY:-}${OPENAI_API_KEY:-}${ANTHROPIC_API_KEY:-}${GOOGLE_API_KEY:-}${GEMINI_API_KEY:-}${XAI_API_KEY:-}${MOONSHOT_API_KEY:-}${OPENCODE_API_KEY:-}${CUSTOM_LLM_API_KEY:-}" ]; then
-  warn "Kein KI-API-Key gesetzt – Plattform startet, KI-Features inaktiv."
+  warn "Kein Provider-Key gesetzt – die Kolonie startet ohne externen Dienst."
 else
-  ok "Mindestens ein KI-Key gesetzt (nur Laufzeit, nicht geloggt)"
+  ok "Mindestens ein Provider-Key gesetzt (nur Laufzeit, nicht geloggt)"
 fi
 
 # ======================================================================

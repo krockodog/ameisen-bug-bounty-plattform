@@ -5,7 +5,7 @@ Blue-Soldaten nutzen DASSELBE Interface wie die offensiven Ameisen
 Karten-Logik. Unterschiede:
   * `colony = "blue"` (für Registry/GUI-Trennung offensiv vs. defensiv).
   * `blue_phases` statt der offensiven Kill-Chain-Phasen:
-    assess → harden → defend → remediate → verify.
+    assess → watch → harden → defend → remediate → verify.
   * Default rein lesend/non-destruktiv. Aktive Fixes/Starts laufen NUR über
     das bestehende Oversight-Gate (ctx.active == Freigabe für aktive Aktion).
 """
@@ -13,8 +13,8 @@ from __future__ import annotations
 
 from ..base import AntAgent, AgentContext, AgentFinding, Playbook, Task
 
-#: Phasen der defensiven Kolonie (analog zur offensiven Kill-Chain).
-BLUE_PHASES = ("assess", "harden", "defend", "remediate", "verify")
+#: Phasen der defensiven Kolonie (erweitert um Watch).
+BLUE_PHASES = ("assess", "watch", "harden", "defend", "remediate", "verify")
 
 
 class BlueAgent(AntAgent):

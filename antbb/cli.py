@@ -817,48 +817,6 @@ def build_parser():
     a.set_defaults(fn=cmd_wlan_recommend)
 
 
-    # wlan-offensive (AUTORISIERT: Handshake/Deauth/Crack/Evil-Twin hinter Gate)
-    wo = sub.add_parser("wlan-offensive",
-                        help="AUTORISIERTE WLAN-Offensiv-Aktionen (Engagement-Gate, default-deny)")\
-        .add_subparsers(dest="sub", required=True)
-    # engagement
-    eng = wo.add_parser("eng", help="Autorisierungs-Engagements verwalten")\
-        .add_subparsers(dest="eng_sub", required=True)
-    a = eng.add_parser("create"); a.add_argument("name")
-    a.add_argument("--bssid", action="append", help="autorisierte BSSID (mehrfach)")
-    a.add_argument("--ssid", action="append", help="autorisierte SSID (mehrfach)")
-    a.add_argument("--client-mac", dest="client_mac")
-    a.add_argument("--location"); a.add_argument("--hours", type=float, default=8.0)
-    a.add_argument("--target"); a.add_argument("--oversight", action="store_true",
-                   help="Oversight direkt bestätigen (sonst blockiert)")
-    a.set_defaults(fn=cmd_wlanoff_eng_create)
-    a = eng.add_parser("list"); a.set_defaults(fn=cmd_wlanoff_eng_list)
-    a = eng.add_parser("oversight"); a.add_argument("id", type=int)
-    a.add_argument("set", choices=["on", "off"]); a.set_defaults(fn=cmd_wlanoff_eng_oversight)
-    a = eng.add_parser("revoke"); a.add_argument("id", type=int)
-    a.set_defaults(fn=cmd_wlanoff_eng_revoke)
-    # actions
-    a = wo.add_parser("capture", help="Handshake-Capture (autorisierte BSSID)")
-    a.add_argument("--bssid", required=True); a.add_argument("--ssid")
-    a.add_argument("--seconds", type=int, default=60); a.add_argument("--dry-run", dest="dry_run", action="store_true")
-    a.set_defaults(fn=cmd_wlanoff_capture)
-    a = wo.add_parser("deauth", help="Gezielter Deauth (autorisierte BSSID, begrenzt)")
-    a.add_argument("--bssid", required=True); a.add_argument("--ssid")
-    a.add_argument("--client-mac", dest="client_mac"); a.add_argument("--packets", type=int, default=10)
-    a.add_argument("--seconds", type=int, default=10); a.add_argument("--dry-run", dest="dry_run", action="store_true")
-    a.set_defaults(fn=cmd_wlanoff_deauth)
-    a = wo.add_parser("crack", help="Offline-WPA-Crack (eigene/autorisierte Capture)")
-    a.add_argument("--capture", required=True); a.add_argument("--bssid"); a.add_argument("--ssid")
-    a.add_argument("--dry-run", dest="dry_run", action="store_true")
-    a.set_defaults(fn=cmd_wlanoff_crack)
-    a = wo.add_parser("evil-twin", help="Evil-Twin+Captive-Portal-Demo (autorisiert)")
-    a.add_argument("--ssid", required=True); a.add_argument("--bssid")
-    a.add_argument("--seconds", type=int, default=120); a.add_argument("--dry-run", dest="dry_run", action="store_true")
-    a.set_defaults(fn=cmd_wlanoff_eviltwin)
-    a = wo.add_parser("credentials", help="Maskierte Credentials anzeigen/löschen")
-    a.add_argument("--engagement", type=int); a.add_argument("--purge", action="store_true")
-    a.set_defaults(fn=cmd_wlanoff_creds)
-
     # ---- ARES "acceptable half" (defensiv/Infra) ----
     fp = sub.add_parser("firewall", help="Scope-Egress-Firewall (DRY-RUN, default-deny)")\
         .add_subparsers(dest="sub", required=True)
@@ -887,10 +845,6 @@ def build_parser():
     a = cp.add_parser("resume"); a.add_argument("run_id"); a.set_defaults(fn=cmd_checkpoint_resume)
     a = cp.add_parser("replay"); a.add_argument("run_id")
     a.add_argument("--verbose", action="store_true"); a.set_defaults(fn=cmd_checkpoint_replay)
-
-    a = sub.add_parser("attackpath", help="Hypothetischer Angriffspfad-Graph (nur Darstellung)")
-    a.add_argument("target"); a.add_argument("--markdown", action="store_true")
-    a.set_defaults(fn=cmd_attackpath)
 
     # ---- Fernzugriff / Remote-Access ----
     rmp = sub.add_parser("remote", help="Fernzugriff (off|tailscale|cloudflare): Status + Praeferenz")\

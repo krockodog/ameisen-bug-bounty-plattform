@@ -1,7 +1,7 @@
 """Die Blaue Königin (Blue Queen / Verteidigungs-Orchestrator).
 
 Pendant zur offensiven Königin, aber DEFENSIV: plant und dispatcht die Blue-
-Team-Soldaten in Phasen (Assess → Harden → Defend → Remediate → Verify),
+Team-Soldaten in Phasen (Assess → Watch → Harden → Defend → Remediate → Verify),
 sammelt Findings zentral, wendet den Proof-Gate an und belegt Remediations
 „nachweislich geschlossen". Human-Oversight-gated und scope-gebunden wie der
 Rest der Plattform.
@@ -100,6 +100,7 @@ class BlueQueen:
         `apply_fixes=True` ist eine AKTIVE Aktion → hartes Oversight-Gate.
         """
         params = dict(params or {})
+        params.setdefault("_store", self.store)
         target_name = "localhost (lokales System)"
         assets: list[str] = ["localhost"]
         if target_id is not None:
